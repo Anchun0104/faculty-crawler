@@ -1,19 +1,23 @@
 #define AppName "高校教师信息采集工具"
-#define AppVersion "1.0.0"
 #define AppPublisher "FacultyCrawler"
 #define AppExeName "FacultyCrawler.exe"
+
+#ifndef AppVersion
+  #error AppVersion must be supplied by build_installer.ps1
+#endif
 
 [Setup]
 AppId={{49E35E7A-8471-4D11-A4B2-337E9F68E426}
 AppName={#AppName}
 AppVersion={#AppVersion}
+VersionInfoVersion={#AppVersion}.0
 AppPublisher={#AppPublisher}
 DefaultDirName={localappdata}\Programs\FacultyCrawler
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\dist\installer
-OutputBaseFilename=FacultyCrawler-Setup
+OutputBaseFilename=FacultyCrawler-Setup-{#AppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

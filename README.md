@@ -96,7 +96,7 @@
 
 ### Windows 普通用户
 
-发布给同事时，优先使用 GitHub Releases 中的 `FacultyCrawler-Setup.exe`。安装包包含桌面程序和 Playwright Chromium，正常使用不需要 Python、命令行或管理员权限。
+发布给同事时，优先使用 GitHub Releases 中的 `FacultyCrawler-Setup-1.0.0.exe`。安装包包含桌面程序和 Playwright Chromium，正常使用不需要 Python、命令行或管理员权限。
 
 当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
 
@@ -124,6 +124,12 @@ python main.py <教师目录URL> --output <输出文件.xlsx> --timeout 30000 --
 ```
 
 Windows 源码模式也可以先运行一次 `setup.bat`，之后双击 `start.bat` 启动桌面端。
+
+## 版本管理
+
+项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `1.0.0`。升级版本时只需修改该文件，例如从 `1.0.0` 改为 `1.1.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
+
+每次构建完成后，脚本会输出版本号、Git 提交号以及安装包 SHA-256，便于同事确认拿到的是同一个版本。
 
 ## 构建发布文件
 
@@ -160,7 +166,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 
 ```text
 dist/FacultyCrawler/FacultyCrawler.exe
-dist/installer/FacultyCrawler-Setup.exe
+dist/installer/FacultyCrawler-Setup-1.0.0.exe
 ```
 
 ## 运行测试
@@ -234,6 +240,7 @@ python -m unittest discover -s tests -v
 ├── docs/                    # 设计和实施文档
 ├── main.py                  # 命令行入口
 ├── desktop_app.py           # 桌面端入口
+├── VERSION                  # 唯一版本号来源
 ├── requirements.txt         # 运行依赖
 ├── requirements-build.txt   # 构建依赖
 ├── build_release.py         # 源码发布包构建

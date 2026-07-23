@@ -179,6 +179,21 @@ python -m unittest discover -s tests -v
 
 桌面端仍应在 Tcl/Tk 正常的 Windows 环境中完成真实窗口、Chromium、Excel 导出、安装和卸载 smoke 测试。无窗口测试不能完全替代最终 UI 验收。
 
+## 多语言职称分类开发进度
+
+`codex/translation` 分支已完成多语言职称分类计划的前两个阶段：
+
+- 建立可审计的 `include`、`exclude`、`review` 三态结果模型；
+- 支持 Unicode 职称规范化；
+- 增加教学、研究、临床、实践、客座、兼职、博士后、Doctoral Researcher 及部分非英语学术职称规则；
+- 优先排除荣休、荣誉、退休、前任、学生、助教/助研、图书馆、IT、实验技术、行政和其他专业服务岗位；
+- 使用完整短语和“更长规则优先”，避免因 `assistant`、`library` 等单词误伤 `Assistant Professor` 或 `Professor of Library Science`。
+
+当前分类器尚未接入爬虫和 Excel 导出，LibreTranslate、SQLite 缓存、三态流水线和桌面端设置也尚未实现，因此现有抓取行为保持不变。后续工作从实施计划 Task 3 开始：
+
+- `docs/superpowers/specs/2026-07-23-multilingual-title-classification-design.md`
+- `docs/superpowers/plans/2026-07-24-multilingual-title-classification.md`
+
 ## 当前缺陷与限制
 
 ### 尚未接入 AI

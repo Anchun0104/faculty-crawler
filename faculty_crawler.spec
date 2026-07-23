@@ -10,6 +10,9 @@ project_root = Path(SPECPATH).resolve()
 browser_source = Path(os.environ["FACULTY_CRAWLER_BROWSER_SOURCE"]).resolve()
 if not browser_source.is_dir():
     raise SystemExit(f"Bundled Chromium source is missing: {browser_source}")
+version_file = Path(os.environ["FACULTY_CRAWLER_VERSION_FILE"]).resolve()
+if not version_file.is_file():
+    raise SystemExit(f"Generated version resource is missing: {version_file}")
 
 hiddenimports = collect_submodules("ui") + collect_submodules("crawler")
 datas = [
@@ -43,6 +46,7 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
+    version=str(version_file),
 )
 coll = COLLECT(
     exe,

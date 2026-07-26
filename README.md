@@ -96,9 +96,11 @@
 
 ### Windows 普通用户
 
-发布给同事时，优先使用 GitHub Releases 中的 `FacultyCrawler-Setup-1.0.0.exe`。安装包包含桌面程序和 Playwright Chromium，正常使用不需要 Python、命令行或管理员权限。
+发布给同事时，请从 GitHub Releases 下载
+[FacultyCrawler-Setup-1.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/FacultyCrawler/FacultyCrawler-Setup-1.0.0.exe)。
+安装包包含桌面程序和 Playwright Chromium，正常使用不需要 Python、命令行或管理员权限。
 
-当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
+当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明或随附 `.sha256.txt` 文件中的 SHA-256。
 
 ### 从源码运行
 
@@ -148,6 +150,8 @@ python build_release.py
 - Inno Setup 6；
 - `requirements-build.txt` 中声明的构建依赖。
 
+构建脚本会把 PyInstaller 中间产物放入系统临时构建目录，避免 Chromium 的深层目录触发 Windows 路径长度限制；最终安装包仍写入项目的 `dist/installer/`。
+
 执行：
 
 ```powershell
@@ -165,7 +169,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 成功后生成：
 
 ```text
-dist/FacultyCrawler/FacultyCrawler.exe
+%TEMP%/FacultyCrawler-installer-build/dist/FacultyCrawler/FacultyCrawler.exe
 dist/installer/FacultyCrawler-Setup-1.0.0.exe
 ```
 
@@ -224,7 +228,7 @@ python -m unittest discover -s tests -v
 ### 发布与验收
 
 - Windows 安装包目前没有商业代码签名。
-- GitHub 首版不保存历史 Excel 结果、浏览器运行时或安装包；这些内容应通过本地输出或 GitHub Releases 管理。
+- Git 仓库不保存历史 Excel 结果、浏览器运行时或安装包；安装包和校验文件通过 GitHub Releases 管理。
 - 真实 Windows UI 和安装流程仍需在目标电脑上做最终验收。
 
 ## 后续计划

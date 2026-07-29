@@ -154,7 +154,7 @@ python build_release.py
 - Inno Setup 6；
 - `requirements-build.txt` 中声明的构建依赖。
 
-构建过程会把虚拟环境、浏览器、模型和 PyInstaller 中间文件放入系统临时构建目录，成功后只需保留 `dist/installer` 中的安装包。
+构建过程会把虚拟环境、浏览器、模型和 PyInstaller 中间文件放入系统临时构建目录，避免 Chromium 的深层目录触发 Windows 路径长度限制；最终安装包仍写入 `dist/installer/`。
 
 执行：
 
@@ -173,7 +173,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 成功后生成：
 
 ```text
-dist/FacultyCrawler/FacultyCrawler.exe
+%TEMP%/FacultyCrawler-installer-build/dist/FacultyCrawler/FacultyCrawler.exe
 dist/installer/FacultyCrawler-Setup-2.0.0.exe
 ```
 

@@ -6,7 +6,7 @@
   #error AppVersion must be supplied by build_installer.ps1
 #endif
 #ifndef ApplicationRoot
-  #define ApplicationRoot "..\\dist\\FacultyCrawler"
+  #error ApplicationRoot must be supplied by build_installer.ps1
 #endif
 
 [Setup]

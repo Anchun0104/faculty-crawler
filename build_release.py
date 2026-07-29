@@ -19,6 +19,10 @@ _ROOT_RELEASE_FILES = (
     Path("requirements.txt"),
     Path("setup.bat"),
     Path("start.bat"),
+    Path("THIRD_PARTY_NOTICES.md"),
+    Path("tools/install_translation_models.py"),
+    Path("translation_service_entry.py"),
+    Path("translation_service.spec"),
     Path("使用说明.txt"),
 )
 RELEASE_FILES = _ROOT_RELEASE_FILES + tuple(

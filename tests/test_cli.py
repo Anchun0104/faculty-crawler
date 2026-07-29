@@ -10,6 +10,42 @@ from main import main
 
 
 class CliTests(unittest.TestCase):
+    def test_translation_options_create_local_translation_settings(self):
+        captured = {}
+
+        class OutcomeCrawler:
+            def __init__(self, timeout: int, *, translation_settings) -> None:
+                captured["timeout"] = timeout
+                captured["translation"] = translation_settings
+
+            def crawl_outcome(self, _url: str) -> CrawlOutcome:
+                return CrawlOutcome(TaskStatus.SUCCEEDED, ())
+
+        with (
+            patch("main.FacultyCrawler", OutcomeCrawler),
+            patch("main.export_to_excel"),
+            patch("main.export_title_pending_to_excel", return_value=None),
+        ):
+            exit_code = main(
+                [
+                    "https://example.edu/faculty",
+                    "--translation-endpoint", "http://localhost:5500",
+                    "--translation-cache-path", "D:/cache.sqlite3",
+                    "--translation-connect-timeout", "3.5",
+                    "--translation-response-timeout", "12.5",
+                    "--translation-retries", "2",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        settings = captured["translation"]
+        self.assertEqual(captured["timeout"], 30000)
+        self.assertEqual(settings.endpoint, "http://localhost:5500")
+        self.assertEqual(settings.cache_path, "D:/cache.sqlite3")
+        self.assertEqual(settings.connect_timeout, 3.5)
+        self.assertEqual(settings.response_timeout, 12.5)
+        self.assertEqual(settings.retries, 2)
+
     def test_main_uses_typed_outcome_without_duplicate_crawl(self):
         record = FacultyRecord(
             "Alan Turing", "Professor", "https://example.edu/people/alan"

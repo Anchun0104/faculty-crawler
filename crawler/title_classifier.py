@@ -54,7 +54,7 @@ def normalize_title(value: str) -> str:
     return re.sub(r"\s+", " ", normalized).strip()
 
 
-RULES_VERSION = "2026.07.1"
+RULES_VERSION = "2026.07.2"
 
 STATUS_EXCLUSIONS = (
     "emeritus",
@@ -397,17 +397,27 @@ ACADEMIC_INCLUSIONS = (
     ("clinical educator", AcademicTrack.CLINICAL, AffiliationStatus.CURRENT),
     ("clinical teacher", AcademicTrack.CLINICAL, AffiliationStatus.CURRENT),
     ("maître de conférences", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("maîtresse de conférences", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professeur des universités", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("professeure des universités", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("enseignant-chercheur", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("enseignante-chercheuse", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("chargé de recherche", AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
+    ("chargée de recherche", AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
     ("universitair hoofddocent", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("universitair docent", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("privatdozent", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("juniorprofessor", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("hochschuldozent", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("universitätsprofessor", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("universitätsprofessorin", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professore ordinario", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professore associato", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("professoressa ordinaria", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("professoressa associata", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professor catedrático", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professor associado", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+    ("professora associada", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professor auxiliar", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professor adjunto", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("profesor titular", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
@@ -439,6 +449,7 @@ ACADEMIC_INCLUSIONS = (
     ("reader", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("professore", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("ricercatore", AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
+    ("assegnista di ricerca", AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
     ("hoogleraar", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("docent", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
     ("docente", AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),

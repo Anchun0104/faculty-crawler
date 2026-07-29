@@ -11,7 +11,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from ctypes import wintypes
 from pathlib import Path
@@ -31,6 +31,10 @@ from crawler.batch import (
 )
 from crawler.app_paths import AppPaths
 from crawler.faculty_crawler import FacultyCrawler
+from crawler.local_translation_service import (
+    LocalTranslationService,
+    bundled_translation_service_path,
+)
 from crawler.diagnostics import (
     DiagnosticEvent,
     ReportRecord,
@@ -42,13 +46,14 @@ from crawler.models import TaskStatus
 from crawler.retention import RetentionService, RunRecord
 from crawler.session_store import SessionStore
 from crawler.settings_store import SettingsStore
+from crawler.translation_settings import TranslationSettings
 from crawler.task_store import StoredRun, StoredTask, TaskStore
 from crawler.verification import (
     VerificationItem,
     VerificationQueue,
     VerificationService,
 )
-from ui.controller import AppController, AppViewState, RunView, STATUS_LABELS, TaskView
+from ui.controller import AppController, AppViewState, RunView, SettingsView, STATUS_LABELS, TaskView
 from ui.runs_page import RunsPage
 from ui.sessions_page import SessionsPage
 from ui.settings_page import SettingsPage
@@ -727,6 +732,7 @@ class DesktopApp(tk.Tk):
         retention_service=None,
         report_store=None,
         opener=None,
+        translation_service: LocalTranslationService | None = None,
     ) -> None:
         super().__init__()
         self.app_paths = app_paths or AppPaths.for_user()
@@ -811,6 +817,8 @@ class DesktopApp(tk.Tk):
         self.rename_value = tk.StringVar()
         self.timeout_value = tk.StringVar(value="30000")
         self.detailed_logs = tk.BooleanVar(value=False)
+        self.translation_settings = TranslationSettings()
+        self.translation_service = translation_service or self._bundled_translation_service()
         self.status_text = tk.StringVar(value="请粘贴网址并生成任务。")
         self.controller = AppController(
             self.output_dir.get(),
@@ -832,8 +840,10 @@ class DesktopApp(tk.Tk):
                 self.output_dir.set(saved_settings.output_dir)
                 self.controller.set_output_dir(saved_settings.output_dir)
                 self.detailed_logs.set(saved_settings.detailed_logs)
+                self.translation_settings = saved_settings.translation
         except Exception:
             logger.warning("Settings load failed: code=settings_load_unavailable")
+        self._start_local_translation_service()
         self.events = self.controller.events
 
         self._build_widgets()
@@ -842,6 +852,29 @@ class DesktopApp(tk.Tk):
             messagebox.showerror("Verification", self.verification_startup_error)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(100, self._drain_events)
+
+    def _start_local_translation_service(self) -> None:
+        service = self.translation_service
+        if service is None:
+            return
+        try:
+            endpoint = service.start()
+            self.translation_settings = replace(
+                self.translation_settings,
+                endpoint=endpoint,
+            )
+        except Exception:
+            logger.warning(
+                "Local translation service unavailable: "
+                "code=translation_service_start_unavailable"
+            )
+
+    @staticmethod
+    def _bundled_translation_service() -> LocalTranslationService | None:
+        executable = bundled_translation_service_path()
+        if not executable.is_file():
+            return None
+        return LocalTranslationService(executable)
 
     def _build_widgets(self) -> None:
         shell = ttk.Frame(self, style="Shell.TFrame")
@@ -1087,17 +1120,47 @@ class DesktopApp(tk.Tk):
         self.controller.mark_report_submitted(report_id)
         self._refresh_workflow_pages()
 
-    def _save_settings(self, output_dir: str, feishu_url: str, detailed: bool, timeout: int):
+    def _save_settings(
+        self,
+        output_dir: str,
+        feishu_url: str,
+        detailed: bool,
+        timeout: int,
+        *,
+        translation_endpoint: str,
+        translation_cache_path: str,
+        translation_connect_timeout: float,
+        translation_response_timeout: float,
+        translation_retries: int,
+    ):
+        try:
+            translation = TranslationSettings(
+                endpoint=translation_endpoint,
+                cache_path=translation_cache_path,
+                connect_timeout=translation_connect_timeout,
+                response_timeout=translation_response_timeout,
+                retries=translation_retries,
+            )
+        except (TypeError, ValueError):
+            return SettingsView(
+                output_dir,
+                feishu_url,
+                detailed,
+                timeout,
+                "翻译设置必须为有效本机地址、非空缓存路径、正超时和非负重试次数",
+            )
         state = self.controller.save_settings(
             output_dir,
             feishu_url,
             detailed,
             timeout_ms=timeout,
+            translation=translation,
         )
         if not state.error:
             self.output_dir.set(state.output_dir)
             self.timeout_value.set(str(state.timeout_ms))
             self.detailed_logs.set(state.detailed_logs)
+            self.translation_settings = state.translation
         return state
 
     def _browse_settings_output(self) -> None:
@@ -1378,16 +1441,20 @@ class DesktopApp(tk.Tk):
                         for task_id, task in zip(task_ids, batch_tasks, strict=True)
                     }
                 )
+            def create_crawler(value: int) -> FacultyCrawler:
+                kwargs = {"session_store": session_store}
+                translation_settings = self.__dict__.get("translation_settings")
+                if isinstance(translation_settings, TranslationSettings):
+                    kwargs["translation_settings"] = translation_settings
+                return FacultyCrawler(value, **kwargs)
+
             verification_context = BatchVerificationContext(
                 run_id,
                 task_ids,
                 self.verification_queue,
                 self.task_store,
                 session_store,
-                lambda value: FacultyCrawler(
-                    value,
-                    session_store=session_store,
-                ),
+                create_crawler,
                 ui_indices,
                 resuming,
             )
@@ -1846,6 +1913,16 @@ class DesktopApp(tk.Tk):
                 logger.warning("Batch cleanup failed: code=worker_join_unavailable")
         if self.log_session is not None:
             self.log_session.close()
+        translation_service = self.__dict__.get("translation_service")
+        stop_translation_service = getattr(translation_service, "stop", None)
+        if callable(stop_translation_service):
+            try:
+                stop_translation_service()
+            except Exception:
+                logger.warning(
+                    "Local translation service cleanup failed: "
+                    "code=translation_service_stop_unavailable"
+                )
         owner = self.__dict__.get("workflow_owner")
         close_owner = getattr(owner, "close", None)
         persistent_worker_alive = (

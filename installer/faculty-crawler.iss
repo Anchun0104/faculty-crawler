@@ -5,6 +5,9 @@
 #ifndef AppVersion
   #error AppVersion must be supplied by build_installer.ps1
 #endif
+#ifndef ApplicationRoot
+  #define ApplicationRoot "..\\dist\\FacultyCrawler"
+#endif
 
 [Setup]
 AppId={{49E35E7A-8471-4D11-A4B2-337E9F68E426}
@@ -28,7 +31,7 @@ InfoAfterFile=..\使用说明.txt
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式："; Flags: unchecked
 
 [Files]
-Source: "..\dist\FacultyCrawler\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ApplicationRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"

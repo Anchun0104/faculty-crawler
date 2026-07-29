@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -14,6 +15,7 @@ from openpyxl import Workbook
 
 from crawler.access_policy import retry_decision
 from crawler.consent import dismiss_cookie_overlay
+from crawler.diagnostics_export import export_records
 from crawler.dynamic_loader import _PlaywrightDynamicAdapter, collect_dynamic_snapshots
 from crawler.models import (
     CrawlOutcome,
@@ -35,10 +37,22 @@ from crawler.parsers import (
     remove_duplicate_title_pending_records,
 )
 from crawler.verification import _canonical_url_hostname, scope_storage_state
+from crawler.title_classifier import StaffClassification, TitleClassifier
+from crawler.title_pipeline import TitlePipeline
+from crawler.translation import LibreTranslateClient
+from crawler.translation_settings import TranslationSettings
 
 
 logger = logging.getLogger(__name__)
 MIN_HTML_LENGTH = 100
+
+
+def _classification_summary(records: list[FacultyRecord]) -> dict[str, int]:
+    summary: dict[str, int] = {}
+    for record in records:
+        key = record.staff_classification
+        summary[key] = summary.get(key, 0) + 1
+    return summary
 
 
 class EmptyFetchError(RuntimeError):
@@ -85,14 +99,29 @@ class FacultyCrawler:
         *,
         session_store=None,
         playwright_factory: Callable[[], object] | None = None,
+        title_pipeline: TitlePipeline | None = None,
+        translation_settings: TranslationSettings | None = None,
     ) -> None:
         self.timeout = timeout
         self.headless = headless
         self.session_store = session_store
         self._playwright_factory = playwright_factory
+        self.title_pipeline = title_pipeline or TitlePipeline(
+            TitleClassifier(),
+            (translation_settings or TranslationSettings()).create_client(),
+        )
         self.last_diagnostics: dict[str, object] = {}
         self.title_pending_records: list[TitlePendingRecord] = []
+        self.review_records: list[FacultyRecord] = []
+        self.excluded_records: list[FacultyRecord] = []
+        self.classification_summary: dict[str, int] = {}
         self._terminal_status: TaskStatus | None = None
+
+    def export_review_records(self, path: str | Path, format: str | None = None) -> Path:
+        return export_records(self.review_records, path, format)
+
+    def export_excluded_records(self, path: str | Path, format: str | None = None) -> Path:
+        return export_records(self.excluded_records, path, format)
 
     def crawl(self, url: str) -> list[FacultyRecord]:
         try:
@@ -279,6 +308,9 @@ class FacultyCrawler:
         records: list[FacultyRecord] = []
         pending_records: list[TitlePendingRecord] = []
         self.title_pending_records = []
+        self.review_records = []
+        self.excluded_records = []
+        self.classification_summary = {}
         self._terminal_status = None
         dynamic_pages_visited = 0
         retry_attempts = 0
@@ -530,6 +562,8 @@ class FacultyCrawler:
                 break
 
         unique_records = remove_duplicates(records)
+        self.review_records = remove_duplicates(self.review_records)
+        self.excluded_records = remove_duplicates(self.excluded_records)
         complete_profile_urls = {
             _normalize_record_profile_url(record.profile_url)
             for record in unique_records
@@ -540,6 +574,26 @@ class FacultyCrawler:
             for record in remove_duplicate_title_pending_records(pending_records)
             if _normalize_record_profile_url(record.profile_url) not in complete_profile_urls
         ]
+        included_keys = {
+            _normalize_record_profile_url(record.profile_url)
+            for record in unique_records
+        }
+        self.review_records = [
+            record
+            for record in self.review_records
+            if _normalize_record_profile_url(record.profile_url) not in included_keys
+        ]
+        self.excluded_records = [
+            record
+            for record in self.excluded_records
+            if _normalize_record_profile_url(record.profile_url) not in included_keys
+        ]
+        self.classification_summary = _classification_summary(
+            [*unique_records, *self.review_records, *self.excluded_records]
+        )
+        self.last_diagnostics["Title classification summary"] = dict(self.classification_summary)
+        self.last_diagnostics["Title review records"] = len(self.review_records)
+        self.last_diagnostics["Title excluded records"] = len(self.excluded_records)
         pages_visited = len(visited) + dynamic_pages_visited
         self.last_diagnostics["Pagination pages visited"] = pages_visited
         self.last_diagnostics["Number of parsed records"] = len(unique_records)
@@ -601,7 +655,12 @@ class FacultyCrawler:
             return []
 
         result = parse_faculty_page(html, url)
-        unique_records = remove_duplicates(result.records)
+        language_hint = _page_language_hint(html)
+        unique_records = self._process_title_classifications(
+            remove_duplicates(result.records),
+            url,
+            language_hint,
+        )
         self.title_pending_records = remove_duplicate_title_pending_records(result.title_pending_records)
         self.last_diagnostics = {
             "URL": url,
@@ -611,6 +670,9 @@ class FacultyCrawler:
             "Number of candidate records": result.candidate_count,
             "Number of parsed records": len(unique_records),
             "Title pending records": len(self.title_pending_records),
+            "Title classification summary": dict(self.classification_summary),
+            "Title review records": len(self.review_records),
+            "Title excluded records": len(self.excluded_records),
             "Low coverage debug": (
                 f"possible person links={result.possible_person_link_count}, "
                 f"candidate containers={result.candidate_count}, "
@@ -653,6 +715,41 @@ class FacultyCrawler:
         logger.info("Extracted %s faculty records.", len(unique_records))
         return unique_records
 
+    def _process_title_classifications(
+        self,
+        records: list[FacultyRecord],
+        source_url: str,
+        language_hint: str,
+    ) -> list[FacultyRecord]:
+        included: list[FacultyRecord] = []
+        for record in records:
+            processed = self.title_pipeline.process(record.title, language_hint=language_hint)
+            classification = processed.classification
+            enriched = replace(
+                record,
+                title_translated=processed.title_translated,
+                title_language=processed.title_language,
+                staff_classification=classification.classification.value,
+                academic_track=classification.academic_track.value,
+                affiliation_status=classification.affiliation_status.value,
+                classification_reason=classification.reason,
+                matched_rule=classification.matched_rule,
+                confidence_tier=classification.confidence.value,
+                translation_status=processed.translation_status,
+                translation_engine=processed.translation_engine,
+                classification_rules_version=processed.rules_version,
+                source_url=source_url,
+            )
+            key = classification.classification.value
+            self.classification_summary[key] = self.classification_summary.get(key, 0) + 1
+            if classification.classification is StaffClassification.INCLUDE:
+                included.append(enriched)
+            elif classification.classification is StaffClassification.EXCLUDE:
+                self.excluded_records.append(enriched)
+            else:
+                self.review_records.append(enriched)
+        return included
+
     def _set_fetch_failure_diagnostics(
         self,
         url: str,
@@ -674,6 +771,13 @@ class FacultyCrawler:
     def _log_diagnostics(self) -> None:
         for label, value in self.last_diagnostics.items():
             logger.info("%s: %s", label, value)
+
+
+def _page_language_hint(html: str) -> str:
+    match = re.search(r"<html\b[^>]*\blang\s*=\s*[\"']?([A-Za-z]{2,3}(?:-[A-Za-z0-9]+)?)", html, re.IGNORECASE)
+    if match is None:
+        return ""
+    return match.group(1).casefold().split("-", 1)[0]
 
 
 def _coerce_load_result(value: object, *, status_first: bool) -> _LoadResult:

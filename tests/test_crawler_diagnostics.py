@@ -1,4 +1,6 @@
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from crawler import faculty_crawler as faculty_crawler_module
@@ -6,9 +8,174 @@ from crawler.faculty_crawler import EmptyFetchError, FacultyCrawler, TransientLo
 from crawler.models import DynamicTrace, TaskStatus
 from crawler.parsers import FacultyRecord
 from crawler.session_store import SessionProtectionError
+from crawler.title_classifier import ClassificationResult, StaffClassification, TitleClassifier
+from crawler.title_pipeline import ProcessedTitle, TitlePipeline
+from crawler.translation import TranslationResult, TranslationStatus
+from crawler.translation_settings import TranslationSettings
 
 
 class CrawlerDiagnosticsTests(unittest.TestCase):
+    def test_translation_settings_build_the_default_title_pipeline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            settings = TranslationSettings(
+                endpoint="http://localhost:5500",
+                cache_path=str(Path(directory) / "translations.sqlite3"),
+                connect_timeout=3.0,
+                response_timeout=12.0,
+                retries=2,
+            )
+
+            crawler = FacultyCrawler(translation_settings=settings)
+
+            translator = crawler.title_pipeline.translator
+            self.assertEqual(translator.endpoint, "http://localhost:5500")
+            self.assertEqual(translator.cache.path, Path(directory) / "translations.sqlite3")
+            self.assertEqual(translator.connect_timeout, 3.0)
+            self.assertEqual(translator.response_timeout, 12.0)
+            self.assertEqual(translator.retries, 2)
+
+    def test_explicit_title_pipeline_takes_precedence_over_translation_settings(self):
+        pipeline = object()
+        crawler = FacultyCrawler(
+            title_pipeline=pipeline,
+            translation_settings=TranslationSettings(),
+        )
+
+        self.assertIs(crawler.title_pipeline, pipeline)
+
+    def test_classification_summary_counts_unique_dynamic_records(self):
+        html = """
+        <main>
+          <article class="person-card">
+            <h2><a href="/people/ada">Ada Lovelace</a></h2>
+            <p>Professor</p>
+          </article>
+        </main>
+        """
+        crawler = FacultyCrawler()
+
+        records = crawler._crawl_pages(
+            "https://example.edu/faculty",
+            load_attempt=lambda _url: (200, html),
+            dynamic_collector=lambda _url, _html: ( [html], []),
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(crawler.classification_summary, {"include": 1})
+        self.assertEqual(crawler.last_diagnostics["Title classification summary"], {"include": 1})
+        self.assertEqual(crawler.last_diagnostics["Title review records"], 0)
+        self.assertEqual(crawler.last_diagnostics["Title excluded records"], 0)
+        self.assertEqual(crawler.review_records, [])
+        self.assertEqual(crawler.excluded_records, [])
+
+    def test_export_facades_write_only_their_diagnostic_records(self):
+        crawler = FacultyCrawler()
+        review = FacultyRecord("Review Person", "Unknown", "https://example.edu/review")
+        excluded = FacultyRecord("Excluded Person", "Emeritus", "https://example.edu/excluded")
+        crawler.review_records = [review]
+        crawler.excluded_records = [excluded]
+
+        with tempfile.TemporaryDirectory() as directory:
+            review_path = crawler.export_review_records(Path(directory) / "review.csv")
+            excluded_path = crawler.export_excluded_records(Path(directory) / "excluded.csv")
+
+            self.assertIn("Review Person", review_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn("Excluded Person", review_path.read_text(encoding="utf-8-sig"))
+            self.assertIn("Excluded Person", excluded_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn("Review Person", excluded_path.read_text(encoding="utf-8-sig"))
+
+    def test_post_parse_title_pipeline_keeps_include_and_audits_exclude_and_review(self):
+        class FakeTitlePipeline:
+            def process(self, title_original, *, language_hint=""):
+                outcomes = {
+                    "Professor": StaffClassification.INCLUDE,
+                    "Chair": StaffClassification.EXCLUDE,
+                    "Dean": StaffClassification.REVIEW,
+                }
+                classification = ClassificationResult(classification=outcomes[title_original])
+                return ProcessedTitle(
+                    title_original=title_original,
+                    title_translated="Associate Professor" if title_original == "Dean" else "",
+                    title_language="ar" if title_original == "Dean" else "",
+                    classification=classification,
+                    translation_status=TranslationStatus.SERVICE_UNAVAILABLE.value if title_original == "Dean" else TranslationStatus.NOT_NEEDED.value,
+                    translation_engine="libretranslate" if title_original == "Dean" else "",
+                )
+
+        crawler = FacultyCrawler(title_pipeline=FakeTitlePipeline())
+        html = """
+        <main><h2>Academic Staff</h2>
+          <div class="person"><a href="/people/ada">Ada Lovelace</a><p>Professor</p></div>
+          <div class="person"><a href="/people/bob">Bob Smith</a><p>Chair</p></div>
+          <div class="person"><a href="/people/cora">Cora Jones</a><p>Dean</p></div>
+        </main>
+        """
+
+        records = crawler._parse_fetched_html("https://example.edu/people", html, 200)
+
+        self.assertEqual([record.name for record in records], ["Ada Lovelace"])
+        self.assertEqual([record.name for record in crawler.excluded_records], ["Bob Smith"])
+        self.assertEqual([record.name for record in crawler.review_records], ["Cora Jones"])
+        self.assertEqual(crawler.review_records[0].title_translated, "Associate Professor")
+        self.assertEqual(crawler.review_records[0].translation_status, "service_unavailable")
+
+    def test_translation_failure_moves_unknown_non_english_title_to_review(self):
+        class OfflineTranslator:
+            def translate(self, title, source_language="auto"):
+                return TranslationResult(status=TranslationStatus.SERVICE_UNAVAILABLE)
+
+        crawler = FacultyCrawler(
+            title_pipeline=TitlePipeline(TitleClassifier(), OfflineTranslator())
+        )
+        html = """
+        <main><h2>Academic Staff</h2>
+          <div class="person">
+            <a href="/people/cora">Cora Jones</a>
+            <p>职位未知</p>
+          </div>
+        </main>
+        """
+
+        records = crawler._parse_fetched_html("https://example.edu/people", html, 200)
+
+        self.assertEqual(records, [])
+        self.assertEqual([record.name for record in crawler.review_records], ["Cora Jones"])
+        self.assertEqual(crawler.review_records[0].title, "职位未知")
+        self.assertEqual(crawler.review_records[0].translation_status, "service_unavailable")
+
+    def test_page_language_hint_translates_unknown_latin_script_title(self):
+        class ItalianTranslator:
+            def __init__(self):
+                self.calls = []
+
+            def translate(self, title, source_language="auto"):
+                self.calls.append((title, source_language))
+                return TranslationResult(
+                    status=TranslationStatus.SUCCESS,
+                    translated_text="Research Fellow",
+                    detected_language="it",
+                )
+
+        translator = ItalianTranslator()
+        crawler = FacultyCrawler(
+            title_pipeline=TitlePipeline(TitleClassifier(), translator)
+        )
+        html = """
+        <html lang="it-IT"><main><h2>Academic Staff</h2>
+          <div class="person">
+            <a href="/people/giulia">Giulia Rossi</a>
+            <span class="job-role">Cultore della materia</span>
+          </div>
+        </main></html>
+        """
+
+        records = crawler._parse_fetched_html("https://example.edu/people", html, 200)
+
+        self.assertEqual([record.name for record in records], ["Giulia Rossi"])
+        self.assertEqual(records[0].title_translated, "Research Fellow")
+        self.assertEqual(records[0].title_language, "it")
+        self.assertEqual(translator.calls, [("Cultore della materia", "it")])
+
     def test_crawl_loads_strict_session_state_into_matching_context(self):
         calls: list[tuple[str, object]] = []
 

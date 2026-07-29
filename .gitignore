@@ -8,3 +8,11 @@ dist/
 output/*
 !output/.gitkeep
 *.log
+translation_cache.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.translation-package-probe/
+handoff/reviewed_titles.xlsx
+handoff/custom_title_rules.json
+handoff/translation_cache.sqlite3
+handoff/handoff-cleanup-manifest.json

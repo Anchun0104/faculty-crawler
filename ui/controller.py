@@ -4,7 +4,7 @@ import queue
 import re
 import threading
 from collections import deque
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Mapping
@@ -20,6 +20,7 @@ from crawler.privacy import (
     safe_url_for_log,
 )
 from crawler.settings_store import AppSettings
+from crawler.translation_settings import TranslationSettings
 
 
 DEFAULT_TIMEOUT_MS = 30_000
@@ -105,6 +106,7 @@ class SettingsView:
     detailed_logs: bool
     timeout_ms: int = DEFAULT_TIMEOUT_MS
     error: str = ""
+    translation: TranslationSettings = field(default_factory=TranslationSettings)
 
 
 @dataclass(frozen=True)
@@ -350,6 +352,7 @@ class AppController:
             settings.feishu_folder_url,
             settings.detailed_logs,
             self._timeout_ms,
+            translation=settings.translation,
         )
 
     def change_settings_output_dir(self, output_dir: str | Path) -> SettingsView:
@@ -364,12 +367,19 @@ class AppController:
         detailed_logs: bool,
         *,
         timeout_ms: int = DEFAULT_TIMEOUT_MS,
+        translation: TranslationSettings | None = None,
     ) -> SettingsView:
         if self._settings_store is None:
             raise RuntimeError("settings store is unavailable")
         if isinstance(timeout_ms, bool) or not isinstance(timeout_ms, int) or timeout_ms <= 0:
             return SettingsView(output_dir, feishu_folder_url, detailed_logs, timeout_ms, "超时时间必须是大于 0 的整数")
-        settings = AppSettings(output_dir, feishu_folder_url, detailed_logs)
+        current = self._settings_store.load()
+        settings = AppSettings(
+            output_dir,
+            feishu_folder_url,
+            detailed_logs,
+            translation or (current.translation if current is not None else TranslationSettings()),
+        )
         try:
             self._settings_store.save(settings)
         except (TypeError, ValueError):
@@ -383,7 +393,13 @@ class AppController:
         self.set_output_dir(output_dir)
         self._settings_output_draft = output_dir
         self._timeout_ms = timeout_ms
-        return SettingsView(output_dir, feishu_folder_url, detailed_logs, timeout_ms)
+        return SettingsView(
+            output_dir,
+            feishu_folder_url,
+            detailed_logs,
+            timeout_ms,
+            translation=settings.translation,
+        )
 
     def storage_usage(self) -> StorageSummary:
         if self._retention is None:

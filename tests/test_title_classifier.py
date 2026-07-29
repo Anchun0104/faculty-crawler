@@ -58,11 +58,42 @@ class TitleClassifierRuleTests(unittest.TestCase):
             "Maître de conférences",
             "Privatdozent",
             "Universitair docent",
+            "Assegnista di ricerca",
         )
 
         for title in titles:
             with self.subTest(title=title):
                 self.assert_classification(title, StaffClassification.INCLUDE)
+
+    def test_italian_research_grant_holder_is_research_track(self) -> None:
+        result = self.classifier.classify("Assegnista di ricerca")
+
+        self.assertEqual(result.classification, StaffClassification.INCLUDE)
+        self.assertEqual(result.academic_track, AcademicTrack.RESEARCH)
+        self.assertEqual(result.affiliation_status, AffiliationStatus.CURRENT)
+        self.assertEqual(result.matched_rule, "assegnista di ricerca")
+
+    def test_validated_gendered_and_localized_titles_use_exact_original_rules(self) -> None:
+        expected = {
+            "Professoressa ordinaria": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Professoressa associata": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Universitätsprofessorin": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Maîtresse de conférences": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Enseignant-chercheur": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Enseignante-chercheuse": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Chargé de recherche": (AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
+            "Chargée de recherche": (AcademicTrack.RESEARCH, AffiliationStatus.CURRENT),
+            "Professeure des universités": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+            "Professora associada": (AcademicTrack.TEACHING_AND_RESEARCH, AffiliationStatus.CURRENT),
+        }
+
+        for title, (track, status) in expected.items():
+            with self.subTest(title=title):
+                result = self.classifier.classify(title)
+                self.assertEqual(result.classification, StaffClassification.INCLUDE)
+                self.assertEqual(result.academic_track, track)
+                self.assertEqual(result.affiliation_status, status)
+                self.assertTrue(result.matched_rule)
 
     def test_status_exclusions_override_academic_titles(self) -> None:
         titles = (

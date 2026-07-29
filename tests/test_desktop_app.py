@@ -1493,6 +1493,7 @@ queue.begin_resume(item.run_id, item.task_id)
 
     def test_close_cancels_active_verification(self) -> None:
         app = self._app(service=object())
+        app.translation_service = Mock()
         app.verification_cancel_event = threading.Event()
         joined = []
 
@@ -1517,6 +1518,7 @@ queue.begin_resume(item.run_id, item.task_id)
         self.assertTrue(app.verification_cancel_event.is_set())
         self.assertEqual(joined, [1.0])
         app.workflow_owner.close.assert_called_once_with()
+        app.translation_service.stop.assert_called_once_with()
         self.assertTrue(app.destroyed)
 
     @classmethod

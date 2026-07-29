@@ -33,7 +33,13 @@
 - 支持管理已保存的站点会话。
 - 支持生成隐私安全的问题报告 ZIP。
 - 支持设置默认输出目录、任务超时和飞书共享文件夹链接。
-- Windows 安装包运行时不要求目标电脑预先安装 Python。
+- Windows 安装包内置 Chromium 和离线多语言职称翻译服务；目标电脑无需预先安装 Python、Docker 或翻译软件。
+- 翻译服务仅监听本机回环地址，应用启动时自动管理，退出应用后自动停止。
+- 支持阿拉伯语、简体/繁体中文、荷兰语、法语、德语、意大利语、日语、葡萄牙语和西班牙语职称翻译为英语；翻译失败会保守进入人工审核。
+
+### 离线翻译组件
+
+2.0.0 起，Windows 发行包会在主程序目录中携带 `translation-service` 子目录及必要的 Argos 模型。用户只需安装或解压一个包并启动主程序；不需要单独安装或运行 LibreTranslate。首次打开应用时，服务会在本机加载模型，随后由程序在后台使用。该组件采用 LibreTranslate（AGPL-3.0），详见 `THIRD_PARTY_NOTICES.md`。
 
 ## 当前能够处理的网页结构
 
@@ -96,11 +102,9 @@
 
 ### Windows 普通用户
 
-发布给同事时，请从 GitHub Releases 下载
-[FacultyCrawler-Setup-1.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/FacultyCrawler/FacultyCrawler-Setup-1.0.0.exe)。
-安装包包含桌面程序和 Playwright Chromium，正常使用不需要 Python、命令行或管理员权限。
+发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/FacultyCrawler/FacultyCrawler-Setup-2.0.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。
 
-当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明或随附 `.sha256.txt` 文件中的 SHA-256。
+当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
 
 ### 从源码运行
 
@@ -129,7 +133,7 @@ Windows 源码模式也可以先运行一次 `setup.bat`，之后双击 `start.b
 
 ## 版本管理
 
-项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `1.0.0`。升级版本时只需修改该文件，例如从 `1.0.0` 改为 `1.1.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
+项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `2.0.0`。升级版本时只需修改该文件，例如从 `2.0.0` 改为 `2.1.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
 
 每次构建完成后，脚本会输出版本号、Git 提交号以及安装包 SHA-256，便于同事确认拿到的是同一个版本。
 
@@ -150,7 +154,7 @@ python build_release.py
 - Inno Setup 6；
 - `requirements-build.txt` 中声明的构建依赖。
 
-构建脚本会把 PyInstaller 中间产物放入系统临时构建目录，避免 Chromium 的深层目录触发 Windows 路径长度限制；最终安装包仍写入项目的 `dist/installer/`。
+构建过程会把虚拟环境、浏览器、模型和 PyInstaller 中间文件放入系统临时构建目录，避免 Chromium 的深层目录触发 Windows 路径长度限制；最终安装包仍写入 `dist/installer/`。
 
 执行：
 
@@ -170,7 +174,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 
 ```text
 %TEMP%/FacultyCrawler-installer-build/dist/FacultyCrawler/FacultyCrawler.exe
-dist/installer/FacultyCrawler-Setup-1.0.0.exe
+dist/installer/FacultyCrawler-Setup-2.0.0.exe
 ```
 
 ## 运行测试
@@ -185,18 +189,17 @@ python -m unittest discover -s tests -v
 
 ## 多语言职称分类开发进度
 
-`codex/translation` 分支已完成多语言职称分类计划的前两个阶段：
+2.0.0 已完成多语言职称分类、翻译和人工复核闭环：
 
 - 建立可审计的 `include`、`exclude`、`review` 三态结果模型；
 - 支持 Unicode 职称规范化；
 - 增加教学、研究、临床、实践、客座、兼职、博士后、Doctoral Researcher 及部分非英语学术职称规则；
 - 优先排除荣休、荣誉、退休、前任、学生、助教/助研、图书馆、IT、实验技术、行政和其他专业服务岗位；
-- 使用完整短语和“更长规则优先”，避免因 `assistant`、`library` 等单词误伤 `Assistant Professor` 或 `Professor of Library Science`。
+- 使用完整短语和“更长规则优先”，避免因 `assistant`、`library` 等单词误伤 `Assistant Professor` 或 `Professor of Library Science`；
+- 确定性规则无法识别时，使用本机 LibreTranslate 将支持的非英语职称翻译为英语；翻译结果使用 SQLite 缓存，并保留原文、译文、语言、翻译状态和分类原因；
+- `include` 记录进入正式 Excel，`exclude` 和 `review` 记录会分别导出，便于人工审核和补充精确原文规则。
 
-当前分类器尚未接入爬虫和 Excel 导出，LibreTranslate、SQLite 缓存、三态流水线和桌面端设置也尚未实现，因此现有抓取行为保持不变。后续工作从实施计划 Task 3 开始：
-
-- `docs/superpowers/specs/2026-07-23-multilingual-title-classification-design.md`
-- `docs/superpowers/plans/2026-07-24-multilingual-title-classification.md`
+翻译服务仅限本机回环地址；它是桌面程序自带的离线组件，不向第三方发送网页内容。后续如加入 AI 页面结构解析，会作为独立、可选的 fallback，不与当前翻译服务耦合。
 
 ## 当前缺陷与限制
 
@@ -228,7 +231,7 @@ python -m unittest discover -s tests -v
 ### 发布与验收
 
 - Windows 安装包目前没有商业代码签名。
-- Git 仓库不保存历史 Excel 结果、浏览器运行时或安装包；安装包和校验文件通过 GitHub Releases 管理。
+- GitHub 仓库不保存历史 Excel 结果或浏览器运行时；面向用户的安装包通过 GitHub Releases 发布。
 - 真实 Windows UI 和安装流程仍需在目标电脑上做最终验收。
 
 ## 后续计划

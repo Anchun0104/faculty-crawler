@@ -1,2 +1,3 @@
 -r requirements.txt
 pyinstaller>=6.16,<7
+libretranslate==1.9.6

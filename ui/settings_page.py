@@ -12,7 +12,7 @@ class SettingsPage(ttk.Frame):
         self,
         master,
         *,
-        on_save: Callable[[str, str, bool, int], SettingsView],
+        on_save: Callable[..., SettingsView],
         on_change_output: Callable[[], None],
         on_clear_temporary: Callable[[], None],
         on_clear_internal: Callable[[], None],
@@ -23,6 +23,11 @@ class SettingsPage(ttk.Frame):
         self.feishu_url = tk.StringVar()
         self.detailed_logs = tk.BooleanVar()
         self.timeout_ms = tk.StringVar(value="30000")
+        self.translation_endpoint = tk.StringVar()
+        self.translation_cache_path = tk.StringVar()
+        self.translation_connect_timeout = tk.StringVar()
+        self.translation_response_timeout = tk.StringVar()
+        self.translation_retries = tk.StringVar()
         self.message = tk.StringVar()
         ttk.Label(self, text="设置", style="Heading.TLabel").grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 18))
         ttk.Label(self, text="结果保存位置").grid(row=1, column=0, sticky=tk.W, pady=7)
@@ -37,6 +42,15 @@ class SettingsPage(ttk.Frame):
         ttk.Label(self.advanced, text="网页等待时间（毫秒）").grid(row=0, column=0, sticky=tk.W)
         ttk.Entry(self.advanced, textvariable=self.timeout_ms, width=14).grid(row=0, column=1, sticky=tk.W, padx=10)
         ttk.Checkbutton(self.advanced, text="保存详细日志", variable=self.detailed_logs).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(8, 0))
+        ttk.Label(self.advanced, text="本机翻译地址").grid(row=2, column=0, sticky=tk.W, pady=(12, 0))
+        ttk.Entry(self.advanced, textvariable=self.translation_endpoint, width=32).grid(row=2, column=1, sticky=tk.W, padx=10, pady=(12, 0))
+        ttk.Label(self.advanced, text="翻译缓存路径").grid(row=3, column=0, sticky=tk.W, pady=(6, 0))
+        ttk.Entry(self.advanced, textvariable=self.translation_cache_path, width=32).grid(row=3, column=1, sticky=tk.W, padx=10, pady=(6, 0))
+        ttk.Label(self.advanced, text="翻译连接/响应超时（秒）").grid(row=4, column=0, sticky=tk.W, pady=(6, 0))
+        ttk.Entry(self.advanced, textvariable=self.translation_connect_timeout, width=8).grid(row=4, column=1, sticky=tk.W, padx=10, pady=(6, 0))
+        ttk.Entry(self.advanced, textvariable=self.translation_response_timeout, width=8).grid(row=4, column=1, sticky=tk.E, pady=(6, 0))
+        ttk.Label(self.advanced, text="翻译重试次数").grid(row=5, column=0, sticky=tk.W, pady=(6, 0))
+        ttk.Entry(self.advanced, textvariable=self.translation_retries, width=8).grid(row=5, column=1, sticky=tk.W, padx=10, pady=(6, 0))
         self._advanced_visible = False
 
         ttk.Button(self, text="保存设置", command=self._save, style="Primary.TButton").grid(row=4, column=2, sticky=tk.E, pady=(18, 12))
@@ -59,6 +73,11 @@ class SettingsPage(ttk.Frame):
         self.feishu_url.set(settings.feishu_folder_url)
         self.detailed_logs.set(settings.detailed_logs)
         self.timeout_ms.set(str(settings.timeout_ms))
+        self.translation_endpoint.set(settings.translation.endpoint)
+        self.translation_cache_path.set(settings.translation.cache_path)
+        self.translation_connect_timeout.set(str(settings.translation.connect_timeout))
+        self.translation_response_timeout.set(str(settings.translation.response_timeout))
+        self.translation_retries.set(str(settings.translation.retries))
         self.message.set(settings.error)
         self.message_label.configure(style="Failure.TLabel" if settings.error else "TLabel")
         self.storage_text.set(f"{storage.files} 个文件 · {_format_bytes(storage.total_bytes)}")
@@ -84,7 +103,25 @@ class SettingsPage(ttk.Frame):
             timeout = int(self.timeout_ms.get())
         except ValueError:
             timeout = 0
-        state = self._on_save(self.output_dir.get(), self.feishu_url.get(), self.detailed_logs.get(), timeout)
+        try:
+            translation_connect_timeout = float(self.translation_connect_timeout.get())
+            translation_response_timeout = float(self.translation_response_timeout.get())
+            translation_retries = int(self.translation_retries.get())
+        except ValueError:
+            self.message.set("翻译设置必须为有效本机地址、非空缓存路径、正超时和非负重试次数")
+            self.message_label.configure(style="Failure.TLabel")
+            return
+        state = self._on_save(
+            self.output_dir.get(),
+            self.feishu_url.get(),
+            self.detailed_logs.get(),
+            timeout,
+            translation_endpoint=self.translation_endpoint.get(),
+            translation_cache_path=self.translation_cache_path.get(),
+            translation_connect_timeout=translation_connect_timeout,
+            translation_response_timeout=translation_response_timeout,
+            translation_retries=translation_retries,
+        )
         self.message.set(state.error or "设置已保存")
         self.message_label.configure(style="Failure.TLabel" if state.error else "TLabel")
 

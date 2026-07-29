@@ -17,6 +17,7 @@ from crawler.app_paths import AppPaths
 from crawler.models import TaskStatus
 from crawler.retention import RetentionService
 from crawler.settings_store import AppSettings
+from crawler.translation_settings import TranslationSettings
 from crawler.task_store import StoredRun, StoredTask, TaskStore
 from crawler.verification import VerificationItem, VerificationQueue
 from desktop_app import (
@@ -297,6 +298,25 @@ class WorkflowControllerTests(unittest.TestCase):
         self.controller.start_batch()
 
         self.assertEqual(self.runner_calls, [45_000])
+
+    def test_translation_settings_round_trip_through_controller(self) -> None:
+        translation = TranslationSettings(
+            endpoint="http://localhost:5500",
+            cache_path=str(self.root / "translation.sqlite3"),
+            connect_timeout=3.0,
+            response_timeout=12.0,
+            retries=2,
+        )
+
+        saved = self.controller.save_settings(
+            str(self.root / "output"),
+            "https://example.feishu.cn/drive/folder/abc",
+            False,
+            translation=translation,
+        )
+
+        self.assertEqual(saved.translation, translation)
+        self.assertEqual(self.controller.load_settings().translation, translation)
 
     def test_storage_summary_excludes_excel_and_cleanup_requires_confirmation(self) -> None:
         summary = self.controller.storage_usage()

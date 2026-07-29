@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from crawler.faculty_crawler import FacultyCrawler, export_title_pending_to_excel, export_to_excel
 from crawler.models import CrawlOutcome, TaskStatus
 from crawler.privacy import safe_exception_message
+from crawler.translation_settings import TranslationSettings
 
 
 DEFAULT_OUTPUT = "output/faculty_data.xlsx"
@@ -19,6 +20,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("url", help="Faculty directory URL")
     parser.add_argument("--output", default=DEFAULT_OUTPUT, help=f"Excel output path. Default: {DEFAULT_OUTPUT}")
     parser.add_argument("--timeout", type=int, default=30000, help="Browser timeout in milliseconds.")
+    parser.add_argument("--translation-endpoint")
+    parser.add_argument("--translation-cache-path")
+    parser.add_argument("--translation-connect-timeout", type=float)
+    parser.add_argument("--translation-response-timeout", type=float)
+    parser.add_argument("--translation-retries", type=int)
     parser.add_argument("--verbose", action="store_true", help="Enable detailed logging.")
     args = parser.parse_args(argv)
 
@@ -32,7 +38,23 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        crawler = FacultyCrawler(timeout=args.timeout)
+        translation_values = {
+            key: value
+            for key, value in {
+                "endpoint": args.translation_endpoint,
+                "cache_path": args.translation_cache_path,
+                "connect_timeout": args.translation_connect_timeout,
+                "response_timeout": args.translation_response_timeout,
+                "retries": args.translation_retries,
+            }.items()
+            if value is not None
+        }
+        crawler_kwargs = (
+            {"translation_settings": TranslationSettings(**translation_values)}
+            if translation_values
+            else {}
+        )
+        crawler = FacultyCrawler(timeout=args.timeout, **crawler_kwargs)
         outcome_method = getattr(type(crawler), "crawl_outcome", None)
         if callable(outcome_method):
             outcome = outcome_method(crawler, args.url)

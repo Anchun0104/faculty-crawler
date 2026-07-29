@@ -28,7 +28,7 @@ class ReleasePackageTests(unittest.TestCase):
             PROJECT_ROOT / "installer" / "faculty-crawler.iss"
         ).read_text(encoding="utf-8")
 
-        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "1.0.0")
+        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "2.0.0")
         self.assertIn(Path("VERSION"), RELEASE_FILES)
         self.assertIn('Join-Path $ProjectRoot "VERSION"', build_text)
         self.assertIn('"FacultyCrawler-Setup-$Version.exe"', build_text)
@@ -44,6 +44,22 @@ class ReleasePackageTests(unittest.TestCase):
             "OutputBaseFilename=FacultyCrawler-Setup-{#AppVersion}",
             inno_text,
         )
+
+    def test_release_includes_offline_translation_service_sources(self) -> None:
+        expected = {
+            Path("translation_service_entry.py"),
+            Path("translation_service.spec"),
+            Path("tools/install_translation_models.py"),
+            Path("THIRD_PARTY_NOTICES.md"),
+        }
+
+        self.assertTrue(expected.issubset(RELEASE_FILES))
+        build_text = (PROJECT_ROOT / "build_installer.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("translation_service.spec", build_text)
+        self.assertIn("install_translation_models.py", build_text)
+        self.assertIn("LibreTranslate.exe", build_text)
 
     def test_installer_build_script_is_not_duplicated(self) -> None:
         build_text = (PROJECT_ROOT / "build_installer.ps1").read_text(
@@ -164,7 +180,7 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertIn("requirements-build.txt", readme)
         self.assertIn("build_installer.ps1", readme)
         self.assertIn(
-            "releases/download/FacultyCrawler/FacultyCrawler-Setup-1.0.0.exe",
+            "releases/download/FacultyCrawler/FacultyCrawler-Setup-2.0.0.exe",
             readme,
         )
         self.assertIn("系统临时构建目录", readme)

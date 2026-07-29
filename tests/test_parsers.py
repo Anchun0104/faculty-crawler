@@ -16,6 +16,24 @@ from crawler.parsers import (
 
 
 class ParserTests(unittest.TestCase):
+    def test_reliable_person_card_keeps_unknown_non_english_title_for_later_classification(self):
+        html = """
+        <main>
+          <h2>Academic Staff</h2>
+          <article class="person-card">
+            <h3><a href="/people/cora-jones">Cora Jones</a></h3>
+            <p>职位未知</p>
+          </article>
+        </main>
+        """
+
+        result = parse_faculty_page(html, "https://example.edu/directory")
+
+        self.assertEqual(
+            [(record.name, record.title, record.profile_url) for record in result.records],
+            [("Cora Jones", "职位未知", "https://example.edu/people/cora-jones")],
+        )
+
     def test_extracts_faculty_cards_and_resolves_relative_urls(self):
         html = """
         <html>

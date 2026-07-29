@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import unicodedata
@@ -16,6 +17,18 @@ class FacultyRecord:
     title: str
     profile_url: str
     email: str = ""
+    title_translated: str = ""
+    title_language: str = ""
+    staff_classification: str = "include"
+    academic_track: str = "unknown"
+    affiliation_status: str = "unknown"
+    classification_reason: str = "legacy_parser_acceptance"
+    matched_rule: str = ""
+    confidence_tier: str = "high"
+    translation_status: str = "not_needed"
+    translation_engine: str = ""
+    classification_rules_version: str = ""
+    source_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -747,12 +760,7 @@ def remove_duplicates(records: Iterable[FacultyRecord]) -> list[FacultyRecord]:
             existing = unique_records[index]
             preferred = max((existing, record), key=_record_completeness)
             email = preferred.email or existing.email or record.email
-            unique_records[index] = FacultyRecord(
-                name=preferred.name,
-                title=preferred.title,
-                profile_url=preferred.profile_url,
-                email=email,
-            )
+            unique_records[index] = dataclasses.replace(preferred, email=email)
             continue
         record_indexes[key] = len(unique_records)
         unique_records.append(record)
@@ -942,6 +950,8 @@ def _record_from_container(
         profile_url = _recover_card_profile_url(container, base_url, name)
 
     title = _extract_title(context, name)
+    if not title and profile_url and _has_strong_person_hint(container):
+        title = _extract_unknown_non_english_title(context, name)
     if not title:
         return None
     title = _strip_name_prefix(title, name)
@@ -3856,6 +3866,28 @@ def _extract_title(container: _Node, name: str) -> str:
         if _is_title_text(cleaned):
             return cleaned
     return ""
+
+
+def _extract_unknown_non_english_title(container: _Node, name: str) -> str:
+    candidates: list[str] = []
+    for chunk in _local_title_text_chunks(container):
+        title = normalize_space(_strip_name_prefix(chunk, name).strip(" -|,;"))
+        if (
+            not title
+            or _normalize_key(title) == _normalize_key(name)
+            or EMAIL_RE.search(title)
+            or len(title) > 140
+            or re.search(r"\d", title)
+            or not _contains_non_ascii_letters(title)
+        ):
+            continue
+        if title not in candidates:
+            candidates.append(title)
+    return candidates[0] if len(candidates) == 1 else ""
+
+
+def _contains_non_ascii_letters(value: str) -> bool:
+    return any(character.isalpha() and ord(character) > 127 for character in value)
 
 
 def _strip_name_prefix(title: str, name: str) -> str:

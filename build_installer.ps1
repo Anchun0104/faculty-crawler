@@ -43,11 +43,15 @@ if (-not $BuildRoot.StartsWith(
 
 $BuildEnvironment = Join-Path $BuildRoot "venv"
 $BrowserRoot = Join-Path $BuildRoot "ms-playwright"
+$TranslationModelsRoot = Join-Path $BuildRoot "translation-models"
 $BuildPython = Join-Path $BuildEnvironment "Scripts\python.exe"
 $ApplicationDistRoot = Join-Path $BuildRoot "dist"
 $PyInstallerWorkRoot = Join-Path $BuildRoot "pyinstaller"
 $ApplicationRoot = Join-Path $ApplicationDistRoot "FacultyCrawler"
 $ApplicationExe = Join-Path $ApplicationRoot "FacultyCrawler.exe"
+$TranslationServiceBuildRoot = Join-Path $ApplicationDistRoot "LibreTranslate"
+$TranslationServiceRoot = Join-Path $ApplicationRoot "translation-service"
+$TranslationServiceExe = Join-Path $TranslationServiceRoot "LibreTranslate.exe"
 $InstallerRoot = Join-Path $ProjectRoot "dist\installer"
 $InstallerExe = Join-Path $InstallerRoot "FacultyCrawler-Setup-$Version.exe"
 $VersionResource = Join-Path $BuildRoot "file_version_info.txt"
@@ -73,6 +77,7 @@ New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
 Remove-TaskBuildDirectory -Path $BuildEnvironment
 Remove-TaskBuildDirectory -Path $ApplicationDistRoot
 Remove-TaskBuildDirectory -Path $PyInstallerWorkRoot
+Remove-TaskBuildDirectory -Path $TranslationModelsRoot
 New-Item -ItemType Directory -Force -Path $BrowserRoot | Out-Null
 
 $VersionResourceContent = @"
@@ -121,6 +126,13 @@ try {
         throw "Unable to install requirements-build.txt."
     }
 
+    $env:ARGOS_PACKAGES_DIR = $TranslationModelsRoot
+    & $BuildPython "tools\install_translation_models.py"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to download the required offline translation models."
+    }
+    $env:FACULTY_CRAWLER_TRANSLATION_MODELS = $TranslationModelsRoot
+
     $env:PLAYWRIGHT_BROWSERS_PATH = $BrowserRoot
     $env:FACULTY_CRAWLER_BROWSER_SOURCE = $BrowserRoot
     $env:FACULTY_CRAWLER_VERSION_FILE = $VersionResource
@@ -137,6 +149,17 @@ try {
 
     if (-not (Test-Path -LiteralPath $ApplicationExe -PathType Leaf)) {
         throw "PyInstaller did not create FacultyCrawler.exe."
+    }
+
+    & $BuildPython -m PyInstaller --noconfirm --clean `
+        --distpath $ApplicationDistRoot `
+        --workpath $PyInstallerWorkRoot `
+        translation_service.spec
+    if ($LASTEXITCODE -ne 0) { throw "LibreTranslate packaging failed." }
+    Move-Item -LiteralPath $TranslationServiceBuildRoot `
+        -Destination $TranslationServiceRoot
+    if (-not (Test-Path -LiteralPath $TranslationServiceExe -PathType Leaf)) {
+        throw "PyInstaller did not create LibreTranslate.exe."
     }
     $BundledChrome = Get-ChildItem `
         -LiteralPath $ApplicationRoot `
@@ -207,5 +230,7 @@ finally {
     Remove-Item Env:PLAYWRIGHT_BROWSERS_PATH -ErrorAction SilentlyContinue
     Remove-Item Env:FACULTY_CRAWLER_BROWSER_SOURCE -ErrorAction SilentlyContinue
     Remove-Item Env:FACULTY_CRAWLER_VERSION_FILE -ErrorAction SilentlyContinue
+    Remove-Item Env:FACULTY_CRAWLER_TRANSLATION_MODELS -ErrorAction SilentlyContinue
+    Remove-Item Env:ARGOS_PACKAGES_DIR -ErrorAction SilentlyContinue
     Pop-Location
 }

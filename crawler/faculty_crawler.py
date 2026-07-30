@@ -283,6 +283,15 @@ class FacultyCrawler:
     def crawl_outcome(self, url: str) -> CrawlOutcome:
         return self._outcome_from_records(self.crawl(url))
 
+    def parse_fetched_directory(
+        self,
+        url: str,
+        html: str,
+        fetch_status: int | None,
+    ) -> list[FacultyRecord]:
+        """Parse a directory snapshot without opening a second browser session."""
+        return self._parse_fetched_html(url, html, fetch_status)
+
     def _crawl_pages(
         self,
         url: str,

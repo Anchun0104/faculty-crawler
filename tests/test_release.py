@@ -28,7 +28,7 @@ class ReleasePackageTests(unittest.TestCase):
             PROJECT_ROOT / "installer" / "faculty-crawler.iss"
         ).read_text(encoding="utf-8")
 
-        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "2.0.0")
+        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "2.1.0")
         self.assertIn(Path("VERSION"), RELEASE_FILES)
         self.assertIn('Join-Path $ProjectRoot "VERSION"', build_text)
         self.assertIn('"FacultyCrawler-Setup-$Version.exe"', build_text)
@@ -207,7 +207,7 @@ class ReleasePackageTests(unittest.TestCase):
             self.assertIn(required, guide)
         self.assertNotIn("浣跨敤璇存槑", readme + guide)
 
-    def test_build_archive_contains_only_runtime_files_under_one_folder(self) -> None:
+    def test_build_archive_contains_only_source_files_under_one_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             archive_path = build_archive(PROJECT_ROOT, Path(temp_dir))
             with zipfile.ZipFile(archive_path) as archive:
@@ -219,7 +219,6 @@ class ReleasePackageTests(unittest.TestCase):
         expected = [f"faculty-crawler-windows/{path.as_posix()}" for path in RELEASE_FILES]
         self.assertEqual(names, expected)
         self.assertTrue(all("output/" not in name for name in names))
-        self.assertTrue(all("tests/" not in name for name in names))
         self.assertTrue(all("__pycache__" not in name for name in names))
         self.assertTrue(all(".venv" not in name and ".git" not in name for name in names))
         self.assertIn("faculty-crawler-windows/crawler/task_store.py", names)
@@ -231,7 +230,7 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertIn("idna>=3.7", requirements)
         expected_modules = {
             f"faculty-crawler-windows/{path.relative_to(PROJECT_ROOT).as_posix()}"
-            for package in ("crawler", "ui")
+            for package in ("crawler", "faculty_workflow", "scripts", "tests", "ui")
             for path in (PROJECT_ROOT / package).rglob("*.py")
         }
         self.assertTrue(expected_modules.issubset(names))
@@ -247,6 +246,31 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertFalse(
             any(part in name.casefold() for name in names for part in forbidden)
         )
+
+    def test_release_contains_evidence_workflow_and_excludes_runtime_data(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_path = build_archive(PROJECT_ROOT, Path(temp_dir))
+            with zipfile.ZipFile(archive_path) as archive:
+                names = set(archive.namelist())
+
+        required = {
+            "faculty-crawler-windows/workflow.py",
+            "faculty-crawler-windows/workflow_desktop.py",
+            "faculty-crawler-windows/faculty_workflow/service.py",
+            "faculty-crawler-windows/scripts/validate_task_acceptance.py",
+            "faculty-crawler-windows/tests/test_workflow_service.py",
+            "faculty-crawler-windows/RELEASE_NOTES_2.1.0.md",
+        }
+        self.assertTrue(required.issubset(names), required - names)
+        forbidden_prefixes = (
+            "faculty-crawler-windows/.git/",
+            "faculty-crawler-windows/.venv/",
+            "faculty-crawler-windows/.codex/",
+            "faculty-crawler-windows/workflow_data/",
+        )
+        forbidden_suffixes = (".db", ".sqlite3", ".xlsx", ".log", ".pyc")
+        self.assertFalse(any(name.startswith(forbidden_prefixes) for name in names))
+        self.assertFalse(any(name.casefold().endswith(forbidden_suffixes) for name in names))
 
     def test_extracted_archive_imports_desktop_app_in_isolation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -291,10 +315,11 @@ class ReleasePackageTests(unittest.TestCase):
                 Path(".git/secret.txt"),
                 Path("crawler/__pycache__/secret.pyc"),
             )
+            secret_marker = b"SEEDED-" + b"LOCAL-" + b"SECRET"
             for relative_path in seeded:
                 path = project_copy / relative_path
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text("SEEDED-LOCAL-SECRET", encoding="utf-8")
+                path.write_bytes(secret_marker)
 
             archive_path = build_archive(project_copy, root / "dist")
             with zipfile.ZipFile(archive_path) as archive:
@@ -304,7 +329,7 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertFalse(
             any(path.as_posix() in name for path in seeded for name in names)
         )
-        self.assertNotIn(b"SEEDED-LOCAL-SECRET", contents)
+        self.assertNotIn(secret_marker, contents)
 
     def test_setup_and_start_scripts_cover_first_install_and_gui_launch(self) -> None:
         setup_text = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")

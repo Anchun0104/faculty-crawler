@@ -795,6 +795,107 @@ def find_next_directory_page_url(html: str, current_url: str) -> str:
     return ""
 
 
+def find_linked_directory_sources(
+    html: str,
+    current_url: str,
+    official_domain: str,
+    *,
+    max_results: int = 12,
+) -> list[tuple[str, str]]:
+    """Return explicitly labelled, bounded official directory sources."""
+    if max_results <= 0:
+        return []
+    parser = _FacultyHTMLParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        return []
+    current = _normalize_record_profile_url(current_url)
+    official_host = urlparse(
+        official_domain if "://" in official_domain else f"https://{official_domain}"
+    ).netloc
+    directory_phrases = (
+        "academic staff", "faculty", "mitarbeiter", "mitarbeiterseiten", "people",
+        "personale docente", "personal docente", "professors", "researchers",
+        "scientific staff", "staff", "team", "wissenschaftliches personal",
+    )
+    excluded_phrases = (
+        "administrative", "administration", "emerit", "retired", "support", "technical",
+    )
+    path_hints = (
+        "/academic", "/directory", "/faculty", "/mitarbeiter", "/people", "/personal",
+        "/professor", "/researcher", "/staff", "/team",
+    )
+    research_unit_phrases = (
+        "arbeitsgruppe", "center for", "centre for", "forschungszentrum", "institute for",
+        "laboratory", "research center", "research centre", "research group",
+    )
+    research_unit_path_hints = (
+        "/center", "/centre", "/group", "/institut", "/lab", "/research", "/zentrum",
+    )
+    found: dict[str, tuple[str, str]] = {}
+    for link in parser.links:
+        candidate = urlparse(urljoin(current_url, link.attr_text("href")))._replace(fragment="")
+        if candidate.scheme not in {"http", "https"} or not candidate.netloc:
+            continue
+        url = candidate.geturl()
+        if _normalize_record_profile_url(url) == current:
+            continue
+        label = _normalize_key(
+            " ".join((link.text(), link.attr_text("title"), link.attr_text("aria-label")))
+        )
+        path = candidate.path.casefold()
+        portal = "research portal" in label or "forschungsportal" in label
+        official = _is_same_institution_host(candidate.netloc, official_host)
+        if not _same_department_scope(urlparse(current_url).path, candidate.path):
+            continue
+        research_unit = (
+            any(term in label for term in research_unit_phrases) or label.startswith("ag ")
+        ) and (
+            any(hint in path for hint in research_unit_path_hints) or label.startswith("ag ")
+        )
+        if portal:
+            if not official:
+                continue
+            source_type = "research_portal"
+        elif research_unit:
+            if not official or any(term in label for term in excluded_phrases):
+                continue
+            source_type = "research_unit"
+        else:
+            if not official or any(term in label for term in excluded_phrases):
+                continue
+            if not any(term in label for term in directory_phrases):
+                continue
+            if not any(hint in path for hint in path_hints):
+                continue
+            source_type = "faculty_directory"
+        normalized = _normalize_record_profile_url(url)
+        found.setdefault(normalized, (url, source_type))
+        if len(found) >= max_results:
+            break
+    return list(found.values())
+
+
+def _same_department_scope(current_path: str, candidate_path: str) -> bool:
+    """Do not cross between sibling ``/departments/<slug>/`` site sections."""
+    def department_slug(path: str) -> str:
+        parts = [part.casefold() for part in path.split("/") if part]
+        try:
+            index = parts.index("departments")
+        except ValueError:
+            return ""
+        return parts[index + 1] if index + 1 < len(parts) else ""
+
+    current_department = department_slug(current_path)
+    candidate_department = department_slug(candidate_path)
+    return not (
+        current_department
+        and candidate_department
+        and current_department != candidate_department
+    )
+
+
 def _find_faculty_containers(root: _Node, base_url: str = "") -> list[_Node]:
     candidates = [
         node

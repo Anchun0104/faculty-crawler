@@ -8,6 +8,7 @@ from crawler.parsers import (
     _extract_title,
     _nearest_section_heading,
     _normalize_record_profile_url,
+    find_linked_directory_sources,
     find_next_directory_page_url,
     parse_faculty_members,
     parse_faculty_page,
@@ -16,6 +17,64 @@ from crawler.parsers import (
 
 
 class ParserTests(unittest.TestCase):
+    def test_linked_directory_discovery_stays_within_the_current_department(self) -> None:
+        html = """
+        <main>
+          <a href="/en/departments/physics-and-astronomy/research/quantum/staff/">
+            Quantum Physics staff
+          </a>
+          <a href="/en/departments/env/research/physical-resource-theory/staff/">
+            Physical Resource Theory staff
+          </a>
+        </main>
+        """
+
+        result = find_linked_directory_sources(
+            html,
+            "https://www.example.edu/en/departments/physics-and-astronomy/research/",
+            "example.edu",
+        )
+
+        self.assertEqual(
+            result,
+            [(
+                "https://www.example.edu/en/departments/physics-and-astronomy/research/quantum/staff/",
+                "faculty_directory",
+            )],
+        )
+
+    def test_discovers_only_labelled_official_secondary_directories_and_portal(self) -> None:
+        html = """
+        <main>
+          <a href="/physics/team">Team</a>
+          <a href="/physics/mitarbeiter/mitarbeiterseiten">Mitarbeiterseiten</a>
+          <a href="/physics/people/technical">Technical staff</a>
+          <a href="/physics/news">People in the news</a>
+          <a href="https://research.example.edu/portal/overview">Institutional Research Portal</a>
+          <a href="/physics/institute/optics">Optics Research Group</a>
+          <a href="/physics/research/quantum-lab">Quantum Physics Laboratory</a>
+          <a href="https://outside.test/research-portal">Research portal</a>
+          <a href="/physics/people/ada">Ada Lovelace</a>
+        </main>
+        """
+
+        result = find_linked_directory_sources(
+            html,
+            "https://www.example.edu/physics/people",
+            "example.edu",
+        )
+
+        self.assertEqual(
+            result,
+            [
+                ("https://www.example.edu/physics/team", "faculty_directory"),
+                ("https://www.example.edu/physics/mitarbeiter/mitarbeiterseiten", "faculty_directory"),
+                ("https://research.example.edu/portal/overview", "research_portal"),
+                ("https://www.example.edu/physics/institute/optics", "research_unit"),
+                ("https://www.example.edu/physics/research/quantum-lab", "research_unit"),
+            ],
+        )
+
     def test_reliable_person_card_keeps_unknown_non_english_title_for_later_classification(self):
         html = """
         <main>

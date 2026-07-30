@@ -8,6 +8,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent
 _ROOT_RELEASE_FILES = (
     Path("VERSION"),
     Path("README.md"),
+    Path("RELEASE_NOTES_2.1.0.md"),
     Path("build_installer.ps1"),
     Path("build_release.py"),
     Path("desktop_app.py"),
@@ -23,12 +24,15 @@ _ROOT_RELEASE_FILES = (
     Path("tools/install_translation_models.py"),
     Path("translation_service_entry.py"),
     Path("translation_service.spec"),
+    Path("workflow.py"),
+    Path("workflow_desktop.py"),
     Path("使用说明.txt"),
 )
+_SOURCE_PACKAGES = ("crawler", "faculty_workflow", "scripts", "tests", "ui")
 RELEASE_FILES = _ROOT_RELEASE_FILES + tuple(
     sorted(
         path.relative_to(_PROJECT_ROOT)
-        for package in ("crawler", "ui")
+        for package in _SOURCE_PACKAGES
         for path in (_PROJECT_ROOT / package).rglob("*.py")
     )
 )

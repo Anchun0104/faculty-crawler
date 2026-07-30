@@ -133,7 +133,7 @@ Windows 源码模式也可以先运行一次 `setup.bat`，之后双击 `start.b
 
 ## 版本管理
 
-项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `2.0.0`。升级版本时只需修改该文件，例如从 `2.0.0` 改为 `2.1.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
+项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `2.1.0`。升级版本时只需修改该文件，例如从 `2.1.0` 改为 `2.2.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
 
 每次构建完成后，脚本会输出版本号、Git 提交号以及安装包 SHA-256，便于同事确认拿到的是同一个版本。
 
@@ -174,7 +174,7 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 
 ```text
 %TEMP%/FacultyCrawler-installer-build/dist/FacultyCrawler/FacultyCrawler.exe
-dist/installer/FacultyCrawler-Setup-2.0.0.exe
+dist/installer/FacultyCrawler-Setup-2.1.0.exe
 ```
 
 ## 运行测试

@@ -973,6 +973,32 @@ class CrawlerDiagnosticsTests(unittest.TestCase):
         self.assertEqual(crawler.last_diagnostics["Number of parsed records"], 1)
         self.assertEqual(crawler.last_diagnostics["Failure stage"], "low_coverage_warning")
 
+    def test_parse_fetched_directory_reuses_supplied_html_without_navigation(self):
+        class NoNavigationCrawler(FacultyCrawler):
+            def crawl(self, url: str):
+                raise AssertionError("cached directory parsing must not navigate")
+
+        crawler = NoNavigationCrawler()
+        html = """
+        <html><body><main>
+          <article class="person-card">
+            <h2><a href="/docs/profiles/ada.pdf">Ada Lovelace</a></h2>
+            <p>Professor of Physics</p>
+          </article>
+        </main></body></html>
+        """
+
+        records = crawler.parse_fetched_directory(
+            "https://example.edu/physics/faculty",
+            html,
+            200,
+        )
+
+        self.assertEqual(
+            [(record.name, record.profile_url) for record in records],
+            [("Ada Lovelace", "https://example.edu/docs/profiles/ada.pdf")],
+        )
+
     def test_crawl_pages_follows_next_query_and_deduplicates_profiles(self):
         crawler = FacultyCrawler()
         pages = {

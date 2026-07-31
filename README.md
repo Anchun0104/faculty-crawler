@@ -179,6 +179,8 @@ dist/installer/FacultyCrawler-Setup-2.1.0.exe
 
 ## 运行测试
 
+使用 Codex、其他 AI 编排工具或命令行批量执行证据工作流，请阅读 [README_WORKFLOW_AI.md](README_WORKFLOW_AI.md)。Windows 安装包继续面向普通用户的一键本地使用。
+
 安装运行依赖和 Chromium 后执行：
 
 ```powershell
@@ -305,3 +307,10 @@ git push -u origin feature/简短功能名称
 ## 许可与责任
 
 仓库当前未附带开源许可证。在正式对外公开、分发或允许外部人员复用前，应由项目负责人确认许可证、数据使用范围和目标网站授权。使用者需要自行确认采集行为及输出数据的合法性与合规性。
+
+## 2.1 快速模式与复核结果
+
+当教师目录已经同时提供姓名、学校工作邮箱、合规职称和对应的页面证据时，系统会直接收录为 `accepted`，不再访问个人主页。仅有缺邮箱、职称/专业不明确或身份冲突的记录才会访问个人页。个人页默认仅尝试 1 次，超时为 10 秒；失败后进入待复核，不拖慢整个学校任务。
+正式结果 Excel 只包含 `accepted`。`review_queue.xlsx` 包含仍可重试的 `review` 和终止自动重试的 `unresolved`。`unresolved` 不代表数据错误，而是公开官方页面在当前规则下仍不足以自动确认。它不会进入正式结果，但会保留供人工处理。
+每条 review 最多重处理 2 次。如果重新解析后的来源、证据与复核原因都没变，系统会提前转为 `unresolved`，以防止无意义的反复爬取。在升级邮箱解码规则、修复站点适配器、更正入口 URL 或完成访问验证后，再人工重新打开该学校的未解决项。
+任务结束时只生成一份 `run_report.json`。Codex 进行下一轮优化时，先读取其 `outcomes`、`diagnostics.failed_sources`、`top_review_reasons` 和 `optimization_signals`；无需从普通运行日志中还原整个任务。

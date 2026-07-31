@@ -4,7 +4,7 @@
 
 **Goal:** Create reliable semantic-version records for 1.0.0 and 2.0.0, migrate 2.0.0 release assets, then remove the old mismatched record only after verification.
 
-**Architecture:** Git tags are the immutable source anchors. GitHub Releases describe the user-facing artifact history. The old `FacultyCrawler` Release is treated as the verified asset source for 2.0.0; each downloaded asset is checked locally and against GitHub's server-side SHA-256 digest after upload before the legacy record is deleted.
+**Architecture:** Git tags are the immutable source anchors. GitHub Releases describe the user-facing artifact history. The old `FacultyCrawler` Release is treated as the verified 2.0.0 asset container; after checksum verification, it is directly rebound to `v2.0.0` so the 1.29 GiB installer is never re-uploaded.
 
 **Tech Stack:** Git, GitHub CLI (`gh`), PowerShell SHA-256 (`Get-FileHash`), GitHub Releases API.
 
@@ -15,7 +15,8 @@
 - `v2.0.0` must target `5e04a28`.
 - Do not claim a historical 1.0.0 installer exists; release notes must say it is source-only.
 - Preserve bytes and names of 2.0.0 assets while migrating them.
-- Delete `FacultyCrawler` Release and tag only after all new `v2.0.0` asset names and SHA-256 digests match their originals.
+- Delete the temporary incomplete `v2.0.0` Release before rebinding the verified legacy Release.
+- Delete the old `FacultyCrawler` tag only after all rebound `v2.0.0` asset names and SHA-256 digests match their originals.
 
 ### Task 1: Verify anchors and create semantic tags
 
@@ -89,7 +90,7 @@ gh release view v1.0.0 --repo Anchun0104/faculty-crawler --json tagName,targetCo
 
 Expected: `tagName` is `v1.0.0`, target is the 1.0.0 commit, `assets` is empty, and the release is published.
 
-### Task 3: Migrate and verify 2.0.0 assets
+### Task 3: Rebind and verify 2.0.0 assets
 
 **Remote objects:** legacy Release `FacultyCrawler`, new Release `v2.0.0`.
 
@@ -111,15 +112,15 @@ Run `gh release download FacultyCrawler` with exact asset patterns and preserve 
 
 Use `Get-FileHash -Algorithm SHA256` for EXE and ZIP, then compare exact hexadecimal values with their downloaded `.sha256.txt` files. Abort if either differs.
 
-- [ ] **Step 4: Create and upload the new v2.0.0 Release**
+- [ ] **Step 4: Remove the incomplete temporary v2.0.0 Release**
 
-Release title: `FacultyCrawler 2.0.0`.
+Confirm it contains only the three small files and no installer, then delete that release. Do not delete `v2.0.0` tag.
 
-Release body must state that it is the canonical 2.0.0 release, identifies commit `5e04a28`, lists the two SHA-256 values, and notes that it replaces the legacy `FacultyCrawler` tag/release.
+- [ ] **Step 5: Rebind the verified legacy Release**
 
-Upload exactly the verified four original files without renaming them.
+Change legacy `FacultyCrawler` Release tag to `v2.0.0`, set title `FacultyCrawler 2.0.0`, and set a release body that identifies commit `5e04a28`, lists the two SHA-256 values, and notes this is the canonical 2.0.0 release.
 
-- [ ] **Step 5: Verify server-side asset records**
+- [ ] **Step 6: Verify server-side asset records**
 
 Run:
 
@@ -131,21 +132,13 @@ Expected: correct tag and target, exactly four assets with original names and si
 
 ### Task 4: Retire the mismatched legacy record
 
-**Remote objects:** legacy Release and tag `FacultyCrawler`.
+**Remote object:** legacy tag `FacultyCrawler`.
 
 - [ ] **Step 1: Re-run final guard checks**
 
-Confirm both semantic tags and releases are present. Confirm `v2.0.0` assets are complete and checksums match. Confirm the old release is still available before deletion.
+Confirm both semantic tags and releases are present. Confirm `v2.0.0` assets are complete and checksums match.
 
-- [ ] **Step 2: Delete only the legacy release**
-
-Run:
-
-```powershell
-gh release delete FacultyCrawler --repo Anchun0104/faculty-crawler --yes
-```
-
-- [ ] **Step 3: Delete only the legacy remote tag**
+- [ ] **Step 2: Delete only the legacy remote tag**
 
 Run:
 
@@ -153,7 +146,7 @@ Run:
 git -C D:\updatecrawler push origin :refs/tags/FacultyCrawler
 ```
 
-- [ ] **Step 4: Verify final public state**
+- [ ] **Step 3: Verify final public state**
 
 Run:
 
@@ -163,4 +156,4 @@ gh release view v1.0.0 --repo Anchun0104/faculty-crawler --json tagName,assets
 gh release view v2.0.0 --repo Anchun0104/faculty-crawler --json tagName,assets
 ```
 
-Expected: `v1.0.0` and `v2.0.0` remain; `FacultyCrawler` is absent; the 1.0.0 Release is source-only and the 2.0.0 Release carries the four verified assets.
+Expected: `v1.0.0` and `v2.0.0` remain; `FacultyCrawler` tag is absent; the 1.0.0 Release is source-only and the 2.0.0 Release carries the four verified assets.

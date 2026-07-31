@@ -6,7 +6,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname);
 const source = pathToFileURL(path.join(root, "faculty-crawler-ui-mockups.html")).href;
 const output = path.join(root, "renders");
-const pages = ["overview", "tasks", "verification", "runs", "sessions", "settings", "storage", "newrun"];
+const pages = ["overview", "tasks", "verification", "runs", "sessions", "settings", "ai", "storage", "newrun"];
 
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({

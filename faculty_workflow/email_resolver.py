@@ -18,6 +18,10 @@ OBFUSCATED_EMAIL_RE = re.compile(
     r"(?P<tld>[A-Z]{2,})\b",
     re.IGNORECASE,
 )
+JAVASCRIPT_CONCAT_EMAIL_RE = re.compile(
+    r"""(?P<local_quote>['\"])(?P<local>[A-Z0-9._%+'-]+)(?P=local_quote)\s*\+\s*['\"]@['\"]\s*\+\s*(?P<domain_quote>['\"])(?P<domain>[A-Z0-9.-]+\.[A-Z]{2,})(?P=domain_quote)""",
+    re.IGNORECASE,
+)
 GENERIC_LOCAL_PARTS = {
     "admin", "admissions", "advising", "communications", "contact", "department",
     "dean", "enquiries", "enquiry", "faculty", "help", "info", "media", "office", "press",
@@ -120,6 +124,7 @@ def _best_email(
     sources: list[tuple[str, str]] = [(page.text or "", "visible_text")]
     decoded_html = html_module.unescape(unquote(page.html or ""))
     sources.append((decoded_html, "html_attribute"))
+    sources.extend(_literal_email_sources(decoded_html))
     obfuscated = [
         (f"{match.group('local')}@{match.group('domain')}.{match.group('tld')}", match.group(0))
         for match in OBFUSCATED_EMAIL_RE.finditer(page.text or "")
@@ -261,6 +266,48 @@ def _split_mailto_candidates(html: str, official_domain: str) -> list[tuple[str,
     except Exception:
         return []
     return parser.candidates
+
+
+class _LiteralEmailAttributeCollector(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.emails: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {key.casefold(): (value or "").strip() for key, value in attrs}
+        pairs = (
+            (values.get("data-email-local", ""), values.get("data-email-domain", "")),
+            (values.get("data-user", ""), values.get("data-domain", "")),
+        )
+        for local, domain in pairs:
+            if (
+                re.fullmatch(r"[A-Z0-9._%+'-]+", local, re.IGNORECASE)
+                and re.fullmatch(r"[A-Z0-9.-]+\.[A-Z]{2,}", domain, re.IGNORECASE)
+            ):
+                self.emails.append(f"{local}@{domain}".casefold())
+
+
+def _literal_email_sources(html: str) -> list[tuple[str, str]]:
+    """Return literal addresses stored in safe, common page encodings.
+
+    This is deliberately a decoder, not a JavaScript evaluator: only quoted
+    local + '@' + domain strings and paired data attributes are recognised.
+    The complete page remains the candidate context so existing identity checks
+    still bind an address to the named person.
+    """
+    normalized = re.sub(r"\\(?:u0040|x40)", "@", html or "", flags=re.IGNORECASE)
+    sources: list[tuple[str, str]] = []
+    for match in JAVASCRIPT_CONCAT_EMAIL_RE.finditer(normalized):
+        email = f"{match.group('local')}@{match.group('domain')}".casefold()
+        sources.append((f"{normalized}\n{email}", "javascript_literal"))
+    parser = _LiteralEmailAttributeCollector()
+    try:
+        parser.feed(normalized)
+    except Exception:
+        return sources
+    for email in dict.fromkeys(parser.emails):
+        sources.append((f"{normalized}\n{email}", "data_attribute"))
+    return sources
 
 
 def _complete_split_domain(fragment: str, official_domain: str) -> str:

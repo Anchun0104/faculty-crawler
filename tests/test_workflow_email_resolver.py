@@ -21,6 +21,64 @@ def page(html: str) -> FetchedPage:
 
 
 class OfficialEmailResolverTests(unittest.TestCase):
+    def test_resolves_literal_javascript_concatenated_email(self) -> None:
+        html = """
+        <main><h1>Ada Lovelace</h1>
+          <script>const contact = 'ada' + '@' + 'example.edu';</script>
+        </main>
+        """
+
+        result = OfficialEmailResolver().resolve(
+            name="Ada Lovelace", page=page(html), official_domain="example.edu"
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.email, "ada@example.edu")
+        self.assertEqual(result.extraction_method, "javascript_literal")
+
+    def test_resolves_literal_data_attribute_email(self) -> None:
+        html = """
+        <article><h1>Ada Lovelace</h1>
+          <span data-email-local="ada" data-email-domain="example.edu"></span>
+        </article>
+        """
+
+        result = OfficialEmailResolver().resolve(
+            name="Ada Lovelace", page=page(html), official_domain="example.edu"
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.email, "ada@example.edu")
+        self.assertEqual(result.extraction_method, "data_attribute")
+
+    def test_resolves_unicode_escaped_javascript_email_separator(self) -> None:
+        html = """
+        <main><h1>Ada Lovelace</h1>
+          <script>const contact = 'ada' + '\\u0040' + 'example.edu';</script>
+        </main>
+        """
+
+        result = OfficialEmailResolver().resolve(
+            name="Ada Lovelace", page=page(html), official_domain="example.edu"
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.email, "ada@example.edu")
+        self.assertEqual(result.extraction_method, "javascript_literal")
+
+    def test_rejects_generic_or_outside_data_attribute_email(self) -> None:
+        html = """
+        <article><h1>Ada Lovelace</h1>
+          <span data-email-local="office" data-email-domain="other.edu"></span>
+        </article>
+        """
+
+        result = OfficialEmailResolver().resolve(
+            name="Ada Lovelace", page=page(html), official_domain="example.edu"
+        )
+
+        self.assertIsNone(result)
+
     def test_literal_official_email_from_pdf_text_is_accepted(self) -> None:
         pdf_page = FetchedPage(
             requested_url="https://phys.example.edu/ada.pdf",

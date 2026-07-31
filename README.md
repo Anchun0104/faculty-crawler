@@ -4,6 +4,23 @@
 
 本项目采用保守、合规的访问策略：不自动破解 CAPTCHA，不绕过登录、付费墙或访问控制，不使用代理池、浏览器指纹伪装或高频请求规避封禁。使用者应遵守目标网站的服务条款、robots 规则以及适用的法律法规。
 
+## 版本演进
+
+| 版本 | 状态与定位 | 主要增加内容 |
+| --- | --- | --- |
+| [v1.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v1.0.0) | 已归档的源码基线 | 基础目录采集、Excel 导出和桌面/命令行入口；没有可验证的历史安装包，但可从该标签重建。 |
+| [v2.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.0.0) | 当前稳定安装包版本 | 离线多语言职称翻译与分类、人工复核、内置 Chromium 和离线翻译组件。 |
+| 2.1.0 | 待发布的证据工作流版本 | 统一直接 URL 与 XLSX 任务、官方证据和快照、PDF/二级页面、轻量邮箱解码、快速路径、有限 review、运行报告和可选兼容 AI。 |
+
+完整的逐版本功能记录请见 [CHANGELOG.md](CHANGELOG.md)。2.1.0 在通过完整验证、构建安装包并创建 `v2.1.0` Release 前不会提供下载链接。
+
+### 选择使用方式
+
+- **普通本地用户**：下载当前稳定版 Windows 安装包，直接在图形界面输入目录 URL，或切换到批量 XLSX 工作流。
+- **Codex、脚本或模型编排用户**：阅读 [README_WORKFLOW_AI.md](README_WORKFLOW_AI.md)，使用同一证据工作流的 URL/XLSX 命令入口。
+
+两种方式均由用户提供可信的 `directory_url`。AI 只能辅助解析已经抓取的页面和专业判断，不能发现/替换目录 URL、猜测邮箱或充当证据来源。
+
 ## 已实现的主要功能
 
 ### 数据采集与清洗
@@ -27,6 +44,7 @@
 
 ### 桌面端工作流
 
+- 单一 `FacultyCrawler.exe` 提供“直接 URL 采集”和“批量证据工作流”两种入口；两者共享快照、邮箱解析、复核和导出能力。
 - 提供首页、任务列表、人工验证、会话、运行记录和设置页面。
 - 可查看任务状态、失败阶段和经过脱敏的诊断信息。
 - 支持单项或顺序处理人工验证任务。
@@ -102,7 +120,7 @@
 
 ### Windows 普通用户
 
-发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/FacultyCrawler/FacultyCrawler-Setup-2.0.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。
+发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/v2.0.0/FacultyCrawler-Setup-2.0.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。2.1.0 正在准备发布，正式资产出现前请继续使用这个已验证版本。
 
 当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
 
@@ -205,16 +223,11 @@ python -m unittest discover -s tests -v
 
 ## 当前缺陷与限制
 
-### 尚未接入 AI
+### AI 为可选辅助，不参与目录发现
 
-当前解析完全依赖确定性规则和启发式策略，尚未接入大语言模型、视觉模型或其他 AI 服务。因此：
+2.1.0 的脚本和桌面端默认使用本地确定性规则；用户只有主动启用并配置兼容模型后，才会调用外部 AI。AI 仅可处理已抓取页面的结构化解析、专业判断和政策草案，不能生成/替换目录 URL、猜测邮箱或作为正式证据。
 
-- 遇到全新页面结构时，不能自动理解页面语义并生成解析规则。
-- 无法根据页面截图智能判断哪些人物属于目标院系。
-- 对模糊职称、跨语言岗位名称和不规则文本的判断能力有限。
-- 解析失败后仍需要开发者查看安全诊断信息，并人工补充或调整规则。
-
-这也意味着当前版本运行成本可控、结果可复现，并且不会把网页内容默认发送给第三方 AI 服务。
+因此，默认运行没有模型费用，也不会把网页内容发送给第三方。即使启用 AI，最终 `accepted` 记录仍必须具有足以自动确认的官方页面字段证据；不充分或冲突的数据会进入 review，而非被模型猜测补齐。
 
 ### 解析和网站变化
 
@@ -244,12 +257,7 @@ python -m unittest discover -s tests -v
 2. 增加更多可复现的高校页面样本和解析回归测试。
 3. 建立 GitHub Actions，在 Pull Request 中自动运行测试。
 4. 将 Windows 安装包改为按版本标签自动构建并上传到 GitHub Releases。
-5. 评估可选的 AI 辅助解析：
-   - 只在规则解析失败或覆盖率过低时启用；
-   - 对发送给第三方模型的数据进行最小化和脱敏；
-   - 保留确定性规则作为默认路径；
-   - AI 结果必须经过结构校验、置信度检查和人工复核；
-   - 不使用 AI 绕过 CAPTCHA、登录或访问控制。
+5. 持续完善可选 AI 的页面解析质量、最小化发送内容和兼容端点测试；AI 不用于目录发现、邮箱猜测、CAPTCHA、登录或访问控制绕过。
 6. 扩充多语言职称词典和院系角色分类。
 7. 完善安装包签名、版本升级和发布校验流程。
 
@@ -304,6 +312,12 @@ git push -u origin feature/简短功能名称
 - Python 虚拟环境和缓存；
 - 日志、任务状态、Cookie、Token 或会话数据。
 
+## 发布与回退
+
+每个正式版本都以不可复用的 `vX.Y.Z` Git 标签和同名 GitHub Release 作为锚点。Release 只附加已经实际构建并校验过的安装包、源码包和 SHA-256 文件；版本功能的完整历史以 [CHANGELOG.md](CHANGELOG.md) 为准。
+
+需要撤回某次已合入的功能时，优先在新分支使用 `git revert <提交>` 创建可审计的反向提交，而不是改写已经发布的历史。需要临时检查旧版本时，可检出对应标签，例如 `git switch --detach v2.0.0`；若要重新优化旧版本，则从该标签创建新分支。`v1.0.0` 没有可验证的历史安装包，但其源码含构建脚本，仍可在合适的 Windows 环境重新生成安装包。
+
 ## 许可与责任
 
 仓库当前未附带开源许可证。在正式对外公开、分发或允许外部人员复用前，应由项目负责人确认许可证、数据使用范围和目标网站授权。使用者需要自行确认采集行为及输出数据的合法性与合规性。
@@ -313,4 +327,5 @@ git push -u origin feature/简短功能名称
 当教师目录已经同时提供姓名、学校工作邮箱、合规职称和对应的页面证据时，系统会直接收录为 `accepted`，不再访问个人主页。仅有缺邮箱、职称/专业不明确或身份冲突的记录才会访问个人页。个人页默认仅尝试 1 次，超时为 10 秒；失败后进入待复核，不拖慢整个学校任务。
 正式结果 Excel 只包含 `accepted`。`review_queue.xlsx` 包含仍可重试的 `review` 和终止自动重试的 `unresolved`。`unresolved` 不代表数据错误，而是公开官方页面在当前规则下仍不足以自动确认。它不会进入正式结果，但会保留供人工处理。
 每条 review 最多重处理 2 次。如果重新解析后的来源、证据与复核原因都没变，系统会提前转为 `unresolved`，以防止无意义的反复爬取。在升级邮箱解码规则、修复站点适配器、更正入口 URL 或完成访问验证后，再人工重新打开该学校的未解决项。
-任务结束时只生成一份 `run_report.json`。Codex 进行下一轮优化时，先读取其 `outcomes`、`diagnostics.failed_sources`、`top_review_reasons` 和 `optimization_signals`；无需从普通运行日志中还原整个任务。
+桌面端的“Candidate data review”会同时显示 `review`、`candidate` 和 `unresolved`。仅选中 `unresolved` 后，“Reopen unresolved”才可用；必须填写发生变化的规则、官方 URL 或访问条件，系统才会重新排队相应学校，既有 `accepted` 记录不会被覆盖。
+任务结束时只生成一份 `run_report.json`。Codex 进行下一轮优化时，先读取其 `outcomes`、`diagnostics.failed_sources`、`top_review_reasons` 和 `optimization_signals`；`performance` 会按来源类型列出累计抓取耗时、重试、缓存命中、动态展开动作与停止原因，无需从普通运行日志中还原整个任务。

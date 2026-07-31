@@ -1,6 +1,8 @@
 # AI / Codex 脚本工作流
 
-本说明面向使用 Codex、其他 AI 编排工具或命令行批量运行的用户。它与 Windows 安装包的普通用户界面是两条入口，但共用同一套 `WorkflowService`、页面快照、官方证据、邮箱解析、复核队列和审计导出。
+本说明面向使用 Codex、其他 AI 编排工具或命令行批量运行的用户。它与 Windows 安装包的普通用户界面是两条入口，但共用同一套 `WorkflowService`、页面快照、官方证据、邮箱解析、复核队列和运行报告导出。
+
+版本定位和每次迭代的完整功能记录请见 [README 的版本演进](README.md#版本演进) 与 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 安全边界
 
@@ -50,7 +52,7 @@ py -3 -m venv .venv
 .\.venv\Scripts\python.exe workflow.py export --task <TASK_ID>
 ```
 
-导出包括兼容结果 Excel、`completed_evidence.xlsx`、`review_queue.xlsx` 和 `audit.json`。
+导出包括正式结果 Excel、`review_queue.xlsx` 和 `run_report.json`。正式结果只含 `accepted`；待确认或未解决记录只保留在 review 队列，不额外导出默认的证据 Excel。
 
 ## 启用兼容 AI
 
@@ -104,4 +106,4 @@ $env:TEAM_MODEL_KEY = "your-key"
 
 正式结果只含 `accepted`。`review_queue.xlsx` 包含 `review` 和 `unresolved`；后者是自动重处理的终态，不会写入正式结果。review 最多重处理两次，若证据和原因无变则会提前变为 `unresolved`。升级解析规则、修复专页适配或完成访问验证后，再人工重新运行该学校。
 
-导出为正式结果 Excel、`review_queue.xlsx` 和 `run_report.json`。让 Codex 优化时，提供 `run_report.json` 并要求其先根据 `optimization_signals`、失败页与复核原因统计识别瓶颈，再提出修改。该报告不包含 API key、Cookie、页面正文或模型提示词。
+导出为正式结果 Excel、`review_queue.xlsx` 和 `run_report.json`。让 Codex 优化时，提供 `run_report.json` 并要求其先根据 `optimization_signals`、失败页与复核原因统计识别瓶颈，再提出修改。其 `performance` 段按来源类型提供累计抓取耗时、重试数和缓存命中数，并列出动态展开动作及停止原因；它不保存页面正文、Cookie、API key 或模型提示词。

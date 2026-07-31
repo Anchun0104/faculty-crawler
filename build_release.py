@@ -8,6 +8,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent
 _ROOT_RELEASE_FILES = (
     Path("VERSION"),
     Path("README.md"),
+    Path("CHANGELOG.md"),
+    Path("README_WORKFLOW_AI.md"),
     Path("RELEASE_NOTES_2.1.0.md"),
     Path("build_installer.ps1"),
     Path("build_release.py"),

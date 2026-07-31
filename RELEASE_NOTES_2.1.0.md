@@ -1,32 +1,34 @@
-# Faculty Crawler 2.1.0 发布说明
+# Faculty Crawler 2.1.0 发布说明（待发布）
 
-## 主要更新
+> `v2.1.0` 标签、安装包和 GitHub Release 尚未创建。本文件说明计划发布的已实现功能；最终下载链接、文件大小和 SHA-256 只会在实际构建与校验完成后补入。
 
-- 新增证据优先的院校教师采集工作流，支持任务数据库、政策确认、候选复核、证据导出和审计记录。
-- 新增 `local-only` 模式，可在不调用 DeepSeek 等外部模型的情况下运行官方目录采集。
-- 支持官方 HTML 与 PDF 名录、已抓取快照缓存和确定性重处理。
-- 扩展官方二级来源发现，可识别 staff、faculty、research group、research portal 等入口。
-- 支持复核候选单独重处理，并保留被替代记录的审计轨迹。
-- 加强院系边界控制，避免从目标院系跳转到兄弟院系。
-- 加强非人员内容过滤，排除栏目标题、项目导航、公共联系块、管理和技术支持页面。
-- 个人主页中的明确姓名、职称和邮箱优先于错误或含糊的目录标签。
-- 发布源码包现包含 `faculty_workflow`、工作流入口、验证脚本和完整测试。
+完整版本历史请见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 主要入口
+## 从 2.0.0 升级后新增的能力
 
-- 原桌面程序：`desktop_app.py`
-- 证据工作流命令行：`workflow.py`
-- 证据工作流桌面入口：`workflow_desktop.py`
-- 接受结果校验：`python -m scripts.validate_task_acceptance <database> <task_id>`
+- 直接 URL 和 XLSX 批量输入改为共享同一证据优先后端；普通本地用户、Codex 和脚本用户得到一致的快照、来源、邮箱、复核与导出行为。
+- 支持人工确认的官方目录入口、HTML/PDF 名录、分页和动态目录展开，以及目录链接出的官方二级页面。
+- 姓名、职称和工作邮箱通过已抓取的官方页面确认；轻量解码仅恢复页面中明确存在的受保护/拆分邮箱，不根据姓名猜测邮箱。
+- 可选支持 DeepSeek 和 OpenAI Chat Completions 兼容服务。默认仍为本地规则，API key 不写入任务数据库、Excel、报告或日志。
 
-## 验证
+## 速度与访问策略
 
-```powershell
-.\.venv\Scripts\python.exe -m unittest discover -s tests
-.\.venv\Scripts\python.exe -m compileall crawler faculty_workflow scripts workflow.py workflow_desktop.py
-git diff --check
-```
+当目录卡片已提供姓名、合规职称、学校工作邮箱和对应字段证据时，系统会直接收录为 `accepted`，跳过个人主页。只有证据不足、专业归属不明确或字段冲突的候选才访问个人页。
 
-## 数据安全
+目录页使用较稳健的抓取与展开策略；个人页默认单次尝试、10 秒快速失败。慢页和坏页会进入复核，不再将几十秒的多次重试放大为整校任务的长时间停滞。
 
-源码发布包不包含 `workflow_data`、SQLite 数据库、抓取快照、生成的 Excel、日志、虚拟环境或 Codex 会话文件。
+## review、未解决记录与重新处理
+
+正式结果 Excel 只包含 `accepted`。`review_queue.xlsx` 包含仍可自动重试的 `review` 和终止自动重试的 `unresolved`；两者都不会混入正式结果。
+
+review 重新处理只会运行本次 review 关联的学校。若来源、证据与复核原因均无变化，最多自动重新处理两次后会转为 `unresolved`，避免无意义的持续爬取。更新邮箱解码规则、修复网站适配、修正入口 URL 或完成访问验证后，可人工填写原因并重新打开 `unresolved` 记录；原有 `accepted` 记录不会被覆盖。
+
+## 运行报告与后续优化
+
+每次任务完成会导出 `run_report.json`。它不保存页面正文、Cookie、API key 或模型提示词，而是汇总结果、失败来源、复核原因、抓取耗时、重试、缓存命中、动态展开动作和停止原因。
+
+下一轮使用 Codex 优化时，应先检查 `outcomes`、`diagnostics.failed_sources`、`top_review_reasons`、`optimization_signals` 和 `performance`，再判断是调整超时策略、补邮箱解码、增加页面适配还是修复来源边界。
+
+## 发布前验证
+
+正式发布前需要完成：完整单元测试、Python 编译检查、源码 ZIP 内容检查、Windows 安装器构建、安装器 SHA-256 计算，以及真实 Windows UI/安装 smoke test。完成后才创建 `v2.1.0` 标签、上传资产并将本说明从“待发布”更新为正式 Release 内容。

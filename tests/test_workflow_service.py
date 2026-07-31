@@ -14,7 +14,7 @@ from crawler.title_classifier import TitleClassifier
 from crawler.title_pipeline import TitlePipeline
 from faculty_workflow.database import WorkflowDatabase
 from faculty_workflow.discovery import DiscoveryHint, EmptyDiscoveryProvider
-from faculty_workflow.fetcher import AccessBlockedError, FetchError, FetchedPage, PageFetcher, html_to_text, retry_delay_seconds, url_is_on_domain
+from faculty_workflow.fetcher import AccessBlockedError, FetchError, FetchPolicy, FetchedPage, PageFetcher, html_to_text, retry_delay_seconds, url_is_on_domain
 from faculty_workflow.models import CandidateExtraction, DisciplinePolicy, SchoolInput
 from faculty_workflow.providers import DeepSeekProvider, MissingAPIKeyError, ProviderResult
 from faculty_workflow.service import (
@@ -104,6 +104,77 @@ class FakeCrawler:
 
 
 class WorkflowServiceTests(unittest.TestCase):
+    def test_direct_urls_create_confirmed_generic_task_without_ai(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            service = WorkflowService(database, provider=FakeProvider())
+
+            task_id = service.create_direct_url_task(
+                directory_urls=["https://www.example.edu/people", "https://law.example.edu/faculty"],
+                output_dir=Path(temp_dir) / "output",
+            )
+
+            task = database.get_task(task_id)
+            schools = database.list_schools(task_id)
+            self.assertEqual(task["discipline"], "General Faculty")
+            self.assertEqual(task["routine_model"], "local-only")
+            self.assertTrue(task["policy_confirmed"])
+            self.assertEqual(
+                [(row["name"], row["directory_url"]) for row in schools],
+                [
+                    ("example.edu", "https://www.example.edu/people"),
+                    ("law.example.edu", "https://law.example.edu/faculty"),
+                ],
+            )
+
+    def test_user_verified_external_directory_is_collected_with_primary_domain_email(self) -> None:
+        class ExternalDirectoryCrawler(FakeCrawler):
+            def parse_fetched_directory(self, url, html, fetch_status):
+                return [FacultyRecord(
+                    "Ada Lovelace",
+                    "Professor of Physics",
+                    "https://research-institute.org/ada",
+                    "ada@university.edu",
+                )]
+
+        class ExternalDirectoryFetcher(FakeFetcher):
+            def fetch(self, url, snapshot_dir, *, expand_directory=False):
+                result = super().fetch(url, snapshot_dir, expand_directory=expand_directory)
+                if url.endswith("/faculty"):
+                    html = (
+                        "<html><title>Research Institute Faculty</title><body>"
+                        "Ada Lovelace Professor of Physics ada@university.edu"
+                        "</body></html>"
+                    )
+                    return FetchedPage(url, url, 200, "Research Institute Faculty", html, html_to_text(html), "directory", result.snapshot_path)
+                return result
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database = WorkflowDatabase(root / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput(
+                    "Example University",
+                    official_domain="university.edu",
+                    directory_url="https://research-institute.org/faculty",
+                )],
+                output_dir=root / "output",
+                routine_model="local-only",
+                escalation_model="local-only",
+                policy_confirmed=True,
+            )
+
+            summary = WorkflowService(
+                database,
+                provider=FakeProvider(),
+                fetcher=ExternalDirectoryFetcher(root),
+                crawler_factory=lambda timeout: ExternalDirectoryCrawler(timeout),
+            ).run_task(task_id)
+
+            self.assertEqual(summary["candidates"], {"accepted": 1})
+            self.assertEqual(database.list_schools(task_id)[0]["status"], "completed")
+
     def test_persisted_pdf_snapshot_is_rehydrated(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             snapshot = Path(temp_dir) / "profile.pdf"
@@ -125,6 +196,47 @@ class WorkflowServiceTests(unittest.TestCase):
             self.assertEqual(page.title, "Ada PDF")
             self.assertIn("ada@example.edu", page.text)
             self.assertEqual(page.html, "")
+
+    def test_review_generation_does_not_run_unrelated_failed_school(self) -> None:
+        class RecordingService(WorkflowService):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.processed_school_names = []
+
+            def _run_school(self, task_id, school, policy, on_progress) -> None:
+                self.processed_school_names.append(str(school["name"]))
+                self.database.update_school(school["id"], status="completed")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database = WorkflowDatabase(root / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [
+                    SchoolInput("Reviewed University", official_domain="reviewed.example.edu"),
+                    SchoolInput("Unrelated Failed University", official_domain="failed.example.edu"),
+                ],
+                output_dir=root / "output",
+                routine_model="local-only",
+                escalation_model="local-only",
+                policy_confirmed=True,
+            )
+            reviewed_school, failed_school = database.list_schools(task_id)
+            database.add_candidate(
+                task_id,
+                reviewed_school["id"],
+                CandidateExtraction(name="Ada Lovelace", homepage="https://reviewed.example.edu/ada"),
+                direction="Physics",
+                source_url="https://reviewed.example.edu/faculty",
+                status="review",
+            )
+            database.update_school(reviewed_school["id"], status="review")
+            database.update_school(failed_school["id"], status="failed", failure_reason="transient failure")
+
+            service = RecordingService(database, provider=FakeProvider())
+            service.run_review_generation(task_id)
+
+            self.assertEqual(service.processed_school_names, ["Reviewed University"])
 
     def test_complete_official_directory_evidence_skips_profile_fetch(self) -> None:
         class DirectoryCompleteFetcher(FakeFetcher):
@@ -549,8 +661,13 @@ class WorkflowServiceTests(unittest.TestCase):
 
     def test_profile_fetch_failure_is_reviewed_without_failing_the_school(self) -> None:
         class FailingProfileFetcher(FakeFetcher):
-            def fetch(self, url, snapshot_dir, *, expand_directory=False):
+            def __init__(self, root):
+                super().__init__(root)
+                self.profile_policies = []
+
+            def fetch(self, url, snapshot_dir, *, expand_directory=False, policy=None):
                 if url.endswith("/ada"):
+                    self.profile_policies.append(policy)
                     raise FetchError("profile timed out")
                 return super().fetch(url, snapshot_dir, expand_directory=expand_directory)
 
@@ -571,16 +688,18 @@ class WorkflowServiceTests(unittest.TestCase):
                 escalation_model="local-only",
                 policy_confirmed=True,
             )
+            fetcher = FailingProfileFetcher(root)
             summary = WorkflowService(
                 database,
                 provider=DeepSeekProvider(api_key=""),
-                fetcher=FailingProfileFetcher(root),
+                fetcher=fetcher,
                 crawler_factory=lambda timeout: IncompleteDirectoryCrawler(timeout),
             ).run_task(task_id)
             self.assertEqual(summary["status"], "completed")
             self.assertEqual(summary["schools"], {"review": 1})
             candidate = database.list_candidates(task_id, ["review"])[0]
             self.assertIn("profile_fetch_failed", candidate["review_reason"])
+            self.assertEqual(fetcher.profile_policies, [FetchPolicy.person_profile()])
 
     def test_budget_reservation_pauses_before_call_and_can_resume(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

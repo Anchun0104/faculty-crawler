@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
 import gzip
+import inspect
 import re
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -31,6 +33,7 @@ from faculty_workflow.exporter import export_task
 from faculty_workflow.fetcher import (
     AccessBlockedError,
     FetchError,
+    FetchPolicy,
     FetchedPage,
     PageFetcher,
     RobotsDeniedError,
@@ -42,6 +45,7 @@ from faculty_workflow.models import (
     CandidateExtraction,
     DisciplinePolicy,
     Evidence,
+    SchoolInput,
     normalize_email,
     normalize_key,
     normalize_url,
@@ -112,6 +116,35 @@ class WorkflowService:
         escalation_model: str = "deepseek-v4-pro",
     ) -> str:
         schools = load_schools(schools_path)
+        return self.create_task_from_schools(
+            schools=schools,
+            discipline=discipline,
+            output_dir=output_dir,
+            budget_usd=budget_usd,
+            history_paths=history_paths,
+            processed_school_paths=processed_school_paths,
+            generate_ai_policy=generate_ai_policy,
+            routine_model=routine_model,
+            escalation_model=escalation_model,
+        )
+
+    def create_task_from_schools(
+        self,
+        *,
+        schools: Iterable[SchoolInput],
+        discipline: str,
+        output_dir: str | Path,
+        budget_usd: float = 20.0,
+        history_paths: Iterable[str | Path] = (),
+        processed_school_paths: Iterable[str | Path] = (),
+        generate_ai_policy: bool = True,
+        routine_model: str = "deepseek-v4-flash",
+        escalation_model: str = "deepseek-v4-pro",
+        policy_confirmed: bool = False,
+    ) -> str:
+        school_rows = list(schools)
+        if not school_rows:
+            raise ValueError("At least one verified directory URL is required")
         draft = DisciplinePolicy(
             discipline=discipline.strip(),
             include_topics=(discipline.strip(),),
@@ -119,11 +152,12 @@ class WorkflowService:
         )
         task_id = self.database.create_task(
             draft,
-            schools,
+            school_rows,
             output_dir=output_dir,
             budget_usd=budget_usd,
             routine_model=routine_model,
             escalation_model=escalation_model,
+            policy_confirmed=policy_confirmed,
         )
         import_history(self.database, task_id, history_paths)
         import_processed_schools(self.database, task_id, processed_school_paths)
@@ -146,6 +180,47 @@ class WorkflowService:
                 )
         return task_id
 
+    def create_direct_url_task(
+        self,
+        *,
+        directory_urls: Iterable[str],
+        output_dir: str | Path,
+        school_name: str = "",
+        discipline: str = "General Faculty",
+        use_ai: bool = False,
+        routine_model: str = "deepseek-v4-flash",
+        escalation_model: str = "deepseek-v4-pro",
+        budget_usd: float = 20.0,
+    ) -> str:
+        urls = [normalize_url(value) for value in directory_urls]
+        urls = list(dict.fromkeys(value for value in urls if value))
+        if not urls:
+            raise ValueError("At least one valid directory URL is required")
+        if school_name.strip() and len(urls) != 1:
+            raise ValueError("A school name override can only be used with one directory URL")
+        schools = [
+            SchoolInput(
+                name=school_name.strip() or _school_identifier_from_url(url),
+                official_domain=(urlparse(url).hostname or "").lower(),
+                directory_url=url,
+            )
+            for url in urls
+        ]
+        policy = DisciplinePolicy(
+            discipline=discipline.strip() or "General Faculty",
+            include_topics=("faculty", "academic staff", "teaching staff"),
+            exclude_topics=(),
+        )
+        return self.database.create_task(
+            policy,
+            schools,
+            output_dir=output_dir,
+            budget_usd=budget_usd,
+            routine_model=routine_model if use_ai else LOCAL_ONLY_MODEL,
+            escalation_model=escalation_model if use_ai else LOCAL_ONLY_MODEL,
+            policy_confirmed=True,
+        )
+
     def confirm_policy(self, task_id: str, policy: DisciplinePolicy) -> None:
         self.database.confirm_policy(task_id, policy)
 
@@ -153,6 +228,7 @@ class WorkflowService:
         self,
         task_id: str,
         *,
+        school_ids: Iterable[int] | None = None,
         on_progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         self.database.recover_interrupted_task(task_id)
@@ -163,11 +239,15 @@ class WorkflowService:
             raise MissingAPIKeyError("DEEPSEEK_API_KEY is not configured; no school was started")
         policy = self.database.get_policy(task_id)
         self.database.update_task(task_id, status="running", error="")
+        selected_school_ids = None if school_ids is None else {int(value) for value in school_ids}
         try:
-            for school in self.database.list_schools(
+            schools = self.database.list_schools(
                 task_id,
                 ["pending", "failed"],
-            ):
+            )
+            if selected_school_ids is not None:
+                schools = [school for school in schools if int(school["id"]) in selected_school_ids]
+            for school in schools:
                 self._emit(on_progress, task_id, school_id=school["id"], message="school_started")
                 if self.database.is_processed_school(task_id, school["name"]):
                     self.database.update_school(school["id"], status="skipped_processed")
@@ -209,9 +289,10 @@ class WorkflowService:
         """Start or resume only active review rows; never default to a whole-task rerun."""
         generation = self.database.begin_review_generation(task_id)
         if generation["status"] == "running":
+            school_ids = tuple(int(value) for value in json.loads(generation["requeued_school_ids"]))
             summary = (
-                self.run_task(task_id, on_progress=on_progress)
-                if on_progress is not None else self.run_task(task_id)
+                self.run_task(task_id, school_ids=school_ids, on_progress=on_progress)
+                if on_progress is not None else self.run_task(task_id, school_ids=school_ids)
             )
             self.database.complete_review_generation(str(generation["id"]), summary)
             generation = self.database.list_review_generations(task_id)[-1]
@@ -246,13 +327,7 @@ class WorkflowService:
         directory_url = str(school["directory_url"] or "")
         if directory_url:
             official_domain = official_domain or (urlparse(directory_url).hostname or "")
-            if official_domain and not url_is_on_domain(directory_url, official_domain):
-                self.database.update_school(
-                    school_id,
-                    status="review",
-                    failure_reason="directory_url_not_on_official_domain",
-                )
-                return
+            trusted_source_domain = urlparse(directory_url).hostname or official_domain
             self.database.update_school(
                 school_id,
                 status="discovering",
@@ -290,7 +365,7 @@ class WorkflowService:
         seeds: dict[str, dict[str, str]] = {}
         self.database.update_school(school_id, status="crawling")
         source_graph = OfficialSourceGraph(
-            official_domain,
+            trusted_source_domain,
             DiscoveryLimits(max_depth=2, max_pages=50),
         )
         for source in sources:
@@ -319,7 +394,7 @@ class WorkflowService:
             last_source_id = source_id
             source = self.database.get_source(source_id)
             discovered = self._collect_directory_seeds(
-                task_id, school_id, source, snapshot_dir, seeds, official_domain
+                task_id, school_id, source, snapshot_dir, seeds, trusted_source_domain
             )
             for url, source_type in discovered:
                 if source_graph.enqueue(
@@ -349,6 +424,7 @@ class WorkflowService:
         # Personal pages often contain the only official links to laboratories,
         # centres, or institutional research portals. Discover those links before
         # candidate decisions so their exact-name facts can merge into the baseline.
+        profile_failures: dict[str, str] = {}
         for seed in list(seeds.values()):
             name = str(seed.get("name") or "")
             profile_url = str(seed.get("profile_url") or "")
@@ -359,6 +435,7 @@ class WorkflowService:
                 str(school["name"]),
                 seed,
                 policy,
+                trusted_source_domain,
                 official_domain,
                 self.title_pipeline,
             )
@@ -375,27 +452,30 @@ class WorkflowService:
                     if cached_source is not None else None
                 )
                 if profile_page is None:
-                    profile_page = self.fetcher.fetch(profile_url, snapshot_dir)
-            except (AccessBlockedError, RobotsDeniedError, FetchError):
+                    profile_page = self._fetch_with_policy(
+                        profile_url, snapshot_dir, FetchPolicy.person_profile()
+                    )
+            except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
+                profile_failures[profile_url] = str(exc)
                 continue
             profile_source_id = self.database.add_source(
                 task_id,
                 school_id,
                 profile_page.final_url,
                 "person_profile",
-                official=url_is_on_domain(profile_page.final_url, official_domain),
+                official=url_is_on_domain(profile_page.final_url, trusted_source_domain),
                 discovered_from=str(seed.get("directory_url") or ""),
                 depth=1,
                 official_boundary=(
-                    "official" if url_is_on_domain(profile_page.final_url, official_domain)
+                    "official" if url_is_on_domain(profile_page.final_url, trusted_source_domain)
                     else "outside_official_domain"
                 ),
             )
             self._record_fetched_source(profile_source_id, profile_page)
-            if not url_is_on_domain(profile_page.final_url, official_domain):
+            if not url_is_on_domain(profile_page.final_url, trusted_source_domain):
                 continue
             for url, source_type in find_linked_directory_sources(
-                profile_page.html, profile_page.final_url, official_domain
+                profile_page.html, profile_page.final_url, trusted_source_domain
             ):
                 if source_graph.enqueue(
                     url,
@@ -430,7 +510,7 @@ class WorkflowService:
             )
             source = self.database.get_source(source_id)
             discovered = self._collect_directory_seeds(
-                task_id, school_id, source, snapshot_dir, seeds, official_domain
+                task_id, school_id, source, snapshot_dir, seeds, trusted_source_domain
             )
             for url, source_type in discovered:
                 if source_graph.enqueue(
@@ -486,6 +566,7 @@ class WorkflowService:
                 str(school["name"]),
                 seed,
                 policy,
+                trusted_source_domain,
                 official_domain,
                 self.title_pipeline,
             )
@@ -502,13 +583,19 @@ class WorkflowService:
                 )
                 self._emit(on_progress, task_id, school_id=school_id, message="directory_candidate_saved")
                 continue
+            if profile_url and profile_url in profile_failures:
+                self._save_profile_fetch_review(
+                    task_id, school_id, policy, profile_url, seed, profile_failures[profile_url]
+                )
+                self._emit(on_progress, task_id, school_id=school_id, message="profile_fetch_review")
+                continue
             discovered_page: FetchedPage | None = None
             if not profile_url:
                 discovered_page = self._discover_official_profile_page(
                     task_id,
                     school_id,
                     str(school["name"]),
-                    official_domain,
+                    trusted_source_domain,
                     seed,
                     snapshot_dir,
                 )
@@ -525,7 +612,7 @@ class WorkflowService:
                 extraction = replace(
                     extraction,
                     official_source=bool(
-                        official_domain and url_is_on_domain(directory_url, official_domain)
+                        trusted_source_domain and url_is_on_domain(directory_url, trusted_source_domain)
                     ),
                 )
                 decision = evaluate_candidate(
@@ -556,7 +643,9 @@ class WorkflowService:
                         if cached_source is not None else None
                     )
                     if page is None:
-                        page = self.fetcher.fetch(profile_url, snapshot_dir)
+                        page = self._fetch_with_policy(
+                            profile_url, snapshot_dir, FetchPolicy.person_profile()
+                        )
                 except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
                     self._save_profile_fetch_review(
                         task_id, school_id, policy, profile_url, seed, str(exc)
@@ -571,9 +660,9 @@ class WorkflowService:
             self._record_fetched_source(profile_source_id, page)
             extraction = self._extract_with_escalation(task_id, school, policy, page, seed)
             deterministic_official = bool(
-                official_domain
-                and url_is_on_domain(page.final_url, official_domain)
-                and url_is_on_domain(extraction.homepage or page.final_url, official_domain)
+                trusted_source_domain
+                and url_is_on_domain(page.final_url, trusted_source_domain)
+                and url_is_on_domain(extraction.homepage or page.final_url, trusted_source_domain)
             )
             if not extraction.homepage:
                 extraction = replace(extraction, homepage=page.final_url)
@@ -594,7 +683,7 @@ class WorkflowService:
                 )
                 if cached_page is not None:
                     return cached_page
-                fetched = self.fetcher.fetch(url, snapshot_dir)
+                fetched = self._fetch_with_policy(url, snapshot_dir, FetchPolicy.person_profile())
                 email_pages.append(fetched)
                 return fetched
 
@@ -675,7 +764,9 @@ class WorkflowService:
                 fetch_state="queued",
             )
             try:
-                page = self.fetcher.fetch(hint.url, snapshot_dir)
+                page = self._fetch_with_policy(
+                    hint.url, snapshot_dir, FetchPolicy.person_profile()
+                )
             except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
                 self.database.update_source(
                     source_id,
@@ -701,6 +792,27 @@ class WorkflowService:
                 continue
             return page
         return None
+
+    def _fetch_with_policy(
+        self,
+        url: str,
+        snapshot_dir: Path,
+        policy: FetchPolicy,
+    ) -> FetchedPage:
+        """Use source-aware fetch settings while preserving injected fetcher compatibility."""
+        try:
+            parameters = inspect.signature(self.fetcher.fetch).parameters.values()
+            supports_policy = any(
+                parameter.name == "policy" or parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters
+            )
+        except (TypeError, ValueError):
+            supports_policy = True
+        if supports_policy:
+            return self.fetcher.fetch(url, snapshot_dir, policy=policy)
+        return self.fetcher.fetch(
+            url, snapshot_dir, expand_directory=policy.expand_directory
+        )
 
     def _collect_directory_seeds(
         self,
@@ -730,7 +842,9 @@ class WorkflowService:
             try:
                 page = _load_cached_source_page(current_source, next_url)
                 if page is None:
-                    page = self.fetcher.fetch(next_url, snapshot_dir, expand_directory=True)
+                    page = self._fetch_with_policy(
+                        next_url, snapshot_dir, FetchPolicy.directory()
+                    )
             except (AccessBlockedError, RobotsDeniedError) as exc:
                 self.database.update_source(
                     source_id, failure_reason=str(exc)[:500], fetch_state="failed"
@@ -1100,6 +1214,7 @@ def _directory_fast_path_candidate(
     school_name: str,
     seed: dict[str, str],
     policy: DisciplinePolicy,
+    trusted_source_domain: str,
     official_domain: str,
     title_pipeline: TitlePipeline,
 ) -> tuple[CandidateExtraction, QualityDecision] | None:
@@ -1115,7 +1230,7 @@ def _directory_fast_path_candidate(
     extraction = replace(
         extraction,
         official_source=bool(
-            official_domain and url_is_on_domain(directory_url, official_domain)
+            trusted_source_domain and url_is_on_domain(directory_url, trusted_source_domain)
         ),
     )
     decision = evaluate_candidate(
@@ -1128,6 +1243,11 @@ def _directory_fast_path_candidate(
         official_domain=official_domain,
     )
     return (extraction, decision) if decision.status == "accepted" else None
+
+
+def _school_identifier_from_url(value: str) -> str:
+    host = (urlparse(value).hostname or "").casefold()
+    return host[4:] if host.startswith("www.") else host
 
 
 def _merge_official_email_resolution(

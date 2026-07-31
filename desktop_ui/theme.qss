@@ -1,0 +1,13 @@
+QWidget {
+    background-color: @APP_BACKGROUND@;
+    color: #18212F;
+    font-family: "Segoe UI Variable", "Microsoft YaHei UI", "Segoe UI";
+    font-size: 14px;
+}
+
+QPushButton:focus,
+QLineEdit:focus,
+QTextEdit:focus,
+QComboBox:focus {
+    border: 2px solid @PRIMARY@;
+}

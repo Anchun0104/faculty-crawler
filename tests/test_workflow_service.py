@@ -449,17 +449,11 @@ class WorkflowServiceTests(unittest.TestCase):
             self.assertEqual(workbook.active.max_row, 2)
             self.assertEqual(workbook.active["A2"].value, "Ada Lovelace")
             self.assertIsNotNone(workbook.active["G2"].hyperlink)
-            completed_workbook = load_workbook(paths["completed"])
-            completed_headers = [cell.value for cell in completed_workbook.active[1]]
-            self.assertEqual(tuple(completed_headers[:8]), list(workbook.active.values)[0])
-            self.assertIn("Original title", completed_headers)
-            self.assertIn("Translation status", completed_headers)
-            self.assertIn("Evidence URLs", completed_headers)
-            audit = json.loads(paths["audit"].read_text(encoding="utf-8"))
-            self.assertEqual(audit["accepted_rows"], 1)
-            self.assertIn("reprocessing_generations", audit)
-            self.assertIn("source_summary", audit)
-            self.assertEqual(audit["completed_preservation"]["accepted_rows"], 1)
+            self.assertEqual(set(paths), {"final", "review", "report"})
+            report = json.loads(paths["report"].read_text(encoding="utf-8"))
+            self.assertEqual(report["outcomes"]["accepted"], 1)
+            self.assertIn("optimization_signals", report)
+            self.assertFalse(any("completed_evidence" in path.name for path in paths.values()))
 
     def test_local_only_task_never_requires_or_calls_a_model(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

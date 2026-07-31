@@ -10,6 +10,7 @@ from openpyxl.styles import Font
 
 from faculty_workflow.database import WorkflowDatabase
 from faculty_workflow.models import normalize_email, normalize_key, normalize_url
+from faculty_workflow.reporting import RunReporter
 
 
 FINAL_HEADERS = ("全名", "邮箱", "last name", "职称", "工作单位（学校）", "所在院系", "个人主页", "专业方向")
@@ -33,20 +34,18 @@ def export_task(database: WorkflowDatabase, task_id: str, output_dir: str | Path
     root = Path(output_dir or task["output_dir"])
     root.mkdir(parents=True, exist_ok=True)
     accepted = database.list_candidates(task_id, ["accepted"])
-    review = database.list_candidates(task_id, ["review", "candidate"])
+    review = database.list_candidates(task_id, ["review", "unresolved", "candidate"])
     _validate_accepted(accepted)
 
     final_path = root / f"{task_id}_教授信息_飞书导入版.xlsx"
-    completed_path = root / f"{task_id}_completed_evidence.xlsx"
     review_path = root / f"{task_id}_review_queue.xlsx"
-    audit_path = root / f"{task_id}_audit.json"
+    report_path = root / f"{task_id}_run_report.json"
     _write_final_workbook(accepted, final_path)
-    _write_completed_evidence_workbook(accepted, completed_path)
     _write_review_workbook(review, review_path)
-    audit = _build_audit(database, task_id, accepted, review)
-    audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+    report = RunReporter().build(database, task_id)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     _verify_final_workbook(final_path, len(accepted))
-    return {"final": final_path, "completed": completed_path, "review": review_path, "audit": audit_path}
+    return {"final": final_path, "review": review_path, "report": report_path}
 
 
 def _write_final_workbook(rows: Iterable[Any], path: Path) -> None:
@@ -175,13 +174,17 @@ def _build_audit(database: WorkflowDatabase, task_id: str, accepted: list[Any], 
             1 for row in school_sources
             if row["fetch_state"] == "failed" or row["failure_reason"]
         )
+        active_identities = [
+            str(row["normalized_person_identity"] or normalize_url(row["homepage"]) or normalize_key(row["name"]))
+            for row in active
+        ]
         school_coverage.append({
             "school_id": school_id,
             "school": school["name"],
             "school_status": school["status"],
             "directory_baseline_active": len(active),
-            "active_unique_people": len({str(row["normalized_person_identity"] or normalize_url(row["homepage"]) or normalize_key(row["name"])) for row in active}),
-            "active_duplicate_count": 0,
+            "active_unique_people": len(set(active_identities)),
+            "active_duplicate_count": len(active_identities) - len(set(active_identities)),
             "candidate_statuses": dict(status_counts),
             "visited_sources": sum(1 for row in school_sources if row["fetch_state"] == "fetched"),
             "failed_sources": failed_sources,

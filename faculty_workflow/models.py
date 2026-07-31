@@ -40,7 +40,7 @@ SCHOOL_STATUSES = {
     "blocked_robots",
     "blocked_access",
 }
-CANDIDATE_STATUSES = {"candidate", "accepted", "review", "rejected"}
+CANDIDATE_STATUSES = {"candidate", "accepted", "review", "unresolved", "rejected"}
 
 
 @dataclass(frozen=True)

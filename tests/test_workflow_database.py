@@ -7,12 +7,41 @@ import unittest
 from pathlib import Path
 
 from faculty_workflow.database import WorkflowDatabase
+from faculty_workflow.exporter import _build_audit
 from faculty_workflow.importers import import_history, import_processed_schools, load_schools
 from faculty_workflow.models import CandidateExtraction, DisciplinePolicy, Evidence, SchoolInput
 from faculty_workflow.quality import evaluate_candidate
 
 
 class WorkflowDatabaseTests(unittest.TestCase):
+    def test_audit_counts_duplicate_active_identities(self) -> None:
+        class AuditDatabase:
+            def summary(self, task_id):
+                return {
+                    "discipline": "Physics", "status": "completed", "budget_usd": 20,
+                    "spent_usd": 0, "schools": {}, "candidates": {}, "historical_people": 0,
+                }
+
+            def list_candidates(self, task_id):
+                return [
+                    {"school_id": 1, "status": "accepted", "name": "Ada Lovelace", "homepage": "", "normalized_person_identity": "adalovelace", "review_reason": ""},
+                    {"school_id": 1, "status": "review", "name": "Ada Lovelace", "homepage": "", "normalized_person_identity": "adalovelace", "review_reason": ""},
+                ]
+
+            def list_sources(self, task_id):
+                return []
+
+            def list_review_generations(self, task_id):
+                return []
+
+            def list_schools(self, task_id):
+                return [{"id": 1, "name": "Example University", "status": "completed"}]
+
+        audit = _build_audit(AuditDatabase(), "task", [], [])
+
+        self.assertEqual(audit["school_coverage"][0]["active_unique_people"], 1)
+        self.assertEqual(audit["school_coverage"][0]["active_duplicate_count"], 1)
+
     def test_field_evidence_and_active_person_identities_are_persistent_and_unique(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "workflow.db"
@@ -315,8 +344,21 @@ class WorkflowDatabaseTests(unittest.TestCase):
             )
             schools = load_schools(path)
             self.assertEqual(schools, [SchoolInput("Example University", "8", "example.edu", "https://example.edu/faculty")])
-            path.write_text("school\nExample University\nExample University\n", encoding="utf-8")
+            path.write_text(
+                "school,directory_url\n"
+                "Example University,https://example.edu/faculty\n"
+                "Example University,https://example.edu/faculty\n",
+                encoding="utf-8",
+            )
             with self.assertRaisesRegex(ValueError, "Duplicate school"):
+                load_schools(path)
+
+    def test_school_loader_requires_a_verified_directory_url_for_each_school(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "schools.csv"
+            path.write_text("school\nExample University\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "directory_url.*Example University"):
                 load_schools(path)
 
     def test_reprocess_rejects_old_candidate_and_resets_school(self) -> None:
@@ -369,6 +411,68 @@ class WorkflowDatabaseTests(unittest.TestCase):
             self.assertEqual(rows["Review Person"]["decision_note"], "superseded_by_review_reprocess")
             self.assertEqual(database.list_schools(task_id)[0]["status"], "pending")
             self.assertTrue(database.has_accepted_candidate_name(task_id, school["id"], "Accepted Person"))
+
+    def test_review_attempt_limit_moves_active_review_to_unresolved(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput("Example University", official_domain="example.edu")],
+                output_dir=temp_dir,
+                policy_confirmed=True,
+            )
+            school = database.list_schools(task_id)[0]
+            extraction = CandidateExtraction(name="Ada Lovelace", homepage="https://example.edu/ada")
+            database.add_candidate(task_id, school["id"], extraction, direction="Physics", source_url="https://example.edu/ada", status="review", review_reason="missing_email")
+
+            first = database.begin_review_generation(task_id)
+            database.complete_review_generation(first["id"], {})
+            database.add_candidate(task_id, school["id"], extraction, direction="Physics", source_url="https://example.edu/ada", status="review", review_reason="missing_email")
+            second = database.begin_review_generation(task_id)
+            database.complete_review_generation(second["id"], {})
+            database.add_candidate(task_id, school["id"], extraction, direction="Physics", source_url="https://example.edu/ada", status="review", review_reason="missing_email")
+
+            third = database.begin_review_generation(task_id)
+
+            self.assertEqual(third["status"], "completed")
+            self.assertEqual(database.list_candidates(task_id, ["unresolved"])[0]["review_reason"], "missing_email")
+
+    def test_unchanged_review_result_becomes_unresolved_before_attempt_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput("Example University", official_domain="example.edu")],
+                output_dir=temp_dir,
+                policy_confirmed=True,
+            )
+            school = database.list_schools(task_id)[0]
+            extraction = CandidateExtraction(name="Ada Lovelace", homepage="https://example.edu/ada")
+            database.add_candidate(task_id, school["id"], extraction, direction="Physics", source_url="https://example.edu/ada", status="review", review_reason="missing_email")
+            generation = database.begin_review_generation(task_id)
+            database.add_candidate(task_id, school["id"], extraction, direction="Physics", source_url="https://example.edu/ada", status="review", review_reason="missing_email")
+
+            self.assertEqual(database.close_unchanged_reviews(task_id, generation["id"]), 1)
+            self.assertEqual(database.list_candidates(task_id, ["unresolved"])[0]["decision_note"], f"unchanged_review:{generation['id']}")
+
+    def test_reopen_unresolved_preserves_accepted_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput("Example University", official_domain="example.edu")],
+                output_dir=temp_dir,
+                policy_confirmed=True,
+            )
+            school = database.list_schools(task_id)[0]
+            database.add_candidate(task_id, school["id"], CandidateExtraction(name="Grace Hopper"), direction="Physics", source_url="https://example.edu/grace", status="accepted")
+            unresolved_id = database.add_candidate(task_id, school["id"], CandidateExtraction(name="Ada Lovelace"), direction="Physics", source_url="https://example.edu/ada", status="unresolved", review_reason="missing_email")
+
+            count, school_ids = database.reopen_unresolved(task_id, [unresolved_id], "decoder upgraded")
+
+            self.assertEqual((count, school_ids), (1, (school["id"],)))
+            self.assertEqual(database.list_candidates(task_id, ["accepted"])[0]["name"], "Grace Hopper")
+            self.assertEqual(database.list_candidates(task_id, ["unresolved"]), [])
 
     def test_reprocess_school_supersedes_all_active_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

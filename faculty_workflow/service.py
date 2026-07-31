@@ -294,6 +294,7 @@ class WorkflowService:
                 self.run_task(task_id, school_ids=school_ids, on_progress=on_progress)
                 if on_progress is not None else self.run_task(task_id, school_ids=school_ids)
             )
+            self.database.close_unchanged_reviews(task_id, str(generation["id"]))
             self.database.complete_review_generation(str(generation["id"]), summary)
             generation = self.database.list_review_generations(task_id)[-1]
         else:

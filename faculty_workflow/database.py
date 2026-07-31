@@ -22,7 +22,7 @@ from faculty_workflow.models import (
 )
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class WorkflowDatabase:
@@ -202,6 +202,8 @@ class WorkflowDatabase:
                     superseded_candidate_ids TEXT NOT NULL DEFAULT '[]',
                     requeued_school_ids TEXT NOT NULL DEFAULT '[]',
                     summary_json TEXT NOT NULL DEFAULT '{}',
+                    attempt_number INTEGER NOT NULL DEFAULT 0,
+                    reopened_reason TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -221,6 +223,8 @@ class WorkflowDatabase:
             self._ensure_column(connection, "candidates", "classification_rules_version", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "candidates", "normalized_person_identity", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "candidates", "normalized_profile_identity", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(connection, "reprocessing_generations", "attempt_number", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "reprocessing_generations", "reopened_reason", "TEXT NOT NULL DEFAULT ''")
             connection.execute(
                 """UPDATE sources SET fetch_state = 'fetched'
                    WHERE fetch_state = 'queued' AND snapshot_path != ''
@@ -723,6 +727,35 @@ class WorkflowDatabase:
             ).fetchall()
             candidate_ids = [int(row["id"]) for row in review_rows]
             school_ids = sorted({int(row["school_id"]) for row in review_rows})
+            completed_attempts = int(connection.execute(
+                """SELECT COUNT(*) FROM reprocessing_generations
+                   WHERE task_id = ? AND status = 'completed' AND requeued_school_ids != '[]'""",
+                (task_id,),
+            ).fetchone()[0])
+            if candidate_ids and completed_attempts >= 2:
+                now = _now()
+                placeholders = ",".join("?" for _ in candidate_ids)
+                connection.execute(
+                    f"""UPDATE candidates SET status = 'unresolved',
+                       decision_note = 'review_attempt_limit_reached', updated_at = ?
+                       WHERE id IN ({placeholders}) AND status = 'review'""",
+                    (now, *candidate_ids),
+                )
+                generation_id = uuid.uuid4().hex[:12]
+                connection.execute(
+                    """INSERT INTO reprocessing_generations(
+                        id, task_id, status, superseded_candidate_ids,
+                        requeued_school_ids, summary_json, attempt_number, created_at, updated_at
+                    ) VALUES(?, ?, 'completed', '[]', '[]', ?, ?, ?, ?)""",
+                    (
+                        generation_id, task_id,
+                        json.dumps({"unresolved_limit": len(candidate_ids)}),
+                        completed_attempts + 1, now, now,
+                    ),
+                )
+                return connection.execute(
+                    "SELECT * FROM reprocessing_generations WHERE id = ?", (generation_id,)
+                ).fetchone()
             if not candidate_ids:
                 latest = connection.execute(
                     """SELECT * FROM reprocessing_generations
@@ -753,14 +786,15 @@ class WorkflowDatabase:
             connection.execute(
                 """INSERT INTO reprocessing_generations(
                     id, task_id, status, superseded_candidate_ids,
-                    requeued_school_ids, summary_json, created_at, updated_at
-                ) VALUES(?, ?, ?, ?, ?, '{}', ?, ?)""",
+                    requeued_school_ids, summary_json, attempt_number, created_at, updated_at
+                ) VALUES(?, ?, ?, ?, ?, '{}', ?, ?, ?)""",
                 (
                     generation_id,
                     task_id,
                     status,
                     json.dumps(candidate_ids),
                     json.dumps(school_ids),
+                    completed_attempts + 1 if candidate_ids else completed_attempts,
                     now,
                     now,
                 ),
@@ -779,6 +813,92 @@ class WorkflowDatabase:
                     (task_id,),
                 ).fetchall()
             )
+
+    def reopen_unresolved(
+        self,
+        task_id: str,
+        candidate_ids: Iterable[int],
+        reason: str,
+    ) -> tuple[int, tuple[int, ...]]:
+        selected = tuple(sorted({int(value) for value in candidate_ids}))
+        if not selected:
+            return 0, ()
+        if not reason.strip():
+            raise ValueError("A reopening reason is required")
+        placeholders = ",".join("?" for _ in selected)
+        with self.transaction() as connection:
+            rows = connection.execute(
+                f"""SELECT id, school_id FROM candidates
+                    WHERE task_id = ? AND status = 'unresolved' AND id IN ({placeholders})""",
+                (task_id, *selected),
+            ).fetchall()
+            if not rows:
+                return 0, ()
+            ids = tuple(int(row["id"]) for row in rows)
+            school_ids = tuple(sorted({int(row["school_id"]) for row in rows}))
+            now = _now()
+            ids_sql = ",".join("?" for _ in ids)
+            connection.execute(
+                f"""UPDATE candidates SET status = 'rejected', decision_note = ?, updated_at = ?
+                    WHERE id IN ({ids_sql})""",
+                (f"superseded_by_reopen:{reason.strip()[:200]}", now, *ids),
+            )
+            schools_sql = ",".join("?" for _ in school_ids)
+            connection.execute(
+                f"""UPDATE schools SET status = 'pending', failure_reason = '', updated_at = ?
+                    WHERE task_id = ? AND id IN ({schools_sql})""",
+                (now, task_id, *school_ids),
+            )
+            return len(ids), school_ids
+
+    def close_unchanged_reviews(self, task_id: str, generation_id: str) -> int:
+        """Stop automatic retry when the same evidence yields the same uncertainty."""
+        with self.transaction() as connection:
+            previous = connection.execute(
+                """SELECT normalized_person_identity, normalized_profile_identity,
+                          review_reason, evidence_json, source_url
+                   FROM candidates
+                   WHERE task_id = ? AND decision_note = ?""",
+                (task_id, f"superseded_by_review_generation:{generation_id}"),
+            ).fetchall()
+            if not previous:
+                return 0
+            fingerprints = {
+                (
+                    str(row["normalized_person_identity"] or ""),
+                    str(row["normalized_profile_identity"] or ""),
+                    str(row["review_reason"] or ""),
+                    str(row["evidence_json"] or ""),
+                    str(row["source_url"] or ""),
+                )
+                for row in previous
+            }
+            active = connection.execute(
+                """SELECT id, normalized_person_identity, normalized_profile_identity,
+                          review_reason, evidence_json, source_url
+                   FROM candidates WHERE task_id = ? AND status = 'review'""",
+                (task_id,),
+            ).fetchall()
+            ids = [
+                int(row["id"])
+                for row in active
+                if (
+                    str(row["normalized_person_identity"] or ""),
+                    str(row["normalized_profile_identity"] or ""),
+                    str(row["review_reason"] or ""),
+                    str(row["evidence_json"] or ""),
+                    str(row["source_url"] or ""),
+                ) in fingerprints
+            ]
+            if not ids:
+                return 0
+            placeholders = ",".join("?" for _ in ids)
+            cursor = connection.execute(
+                f"""UPDATE candidates SET status = 'unresolved', decision_note = ?, updated_at = ?
+                    WHERE id IN ({placeholders}) AND status = 'review'""",
+                (f"unchanged_review:{generation_id}", _now(), *ids),
+            )
+            return int(cursor.rowcount)
 
     def complete_review_generation(self, generation_id: str, summary: dict[str, Any]) -> None:
         now = _now()

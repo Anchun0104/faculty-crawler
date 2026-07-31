@@ -89,6 +89,15 @@ $env:TEAM_MODEL_KEY = "your-key"
 
 `reprocess-reviews` 只重新处理 review 关联的学校，已完成的 accepted 记录会保留。
 
+当规则、目录 URL 或站点访问状态已变更时，可以显式重新打开 `unresolved` 记录（必须填写原因）：
+
+```powershell
+.\.venv\Scripts\python.exe workflow.py reopen-unresolved `
+  --task <TASK_ID> `
+  --candidate <CANDIDATE_ID> `
+  --reason "email decoder upgraded"
+```
+
 ## 快速模式、未解决记录与优化报告
 
 目录页已具备姓名、学校工作邮箱、合规职称和字段证据的人员会直接进入 `accepted`，不会访问个人主页。只有证据不足的人员才访问个人页，并使用默认 `10 秒 / 1 次` 的快速失败策略。

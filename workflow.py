@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
 from faculty_workflow.database import WorkflowDatabase
+from faculty_workflow.ai_settings import ProviderConfiguration
 from faculty_workflow.models import DisciplinePolicy
+from faculty_workflow.providers import DeepSeekProvider, OpenAICompatibleProvider
 from faculty_workflow.service import WorkflowService
 
 
@@ -18,10 +21,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evidence-first professional faculty collection workflow using DeepSeek")
     parser.add_argument("--database", default=DEFAULT_DATABASE, help=f"SQLite database. Default: {DEFAULT_DATABASE}")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--ai-provider", choices=("local", "deepseek", "compatible"), default="local")
+    parser.add_argument("--ai-base-url", default="", help="HTTPS API base URL; required for compatible providers")
+    parser.add_argument("--ai-model", default="", help="Model for a compatible provider")
+    parser.add_argument("--ai-key-env", default="FACULTY_CRAWLER_API_KEY", help="Environment variable containing the API key")
     commands = parser.add_subparsers(dest="command", required=True)
 
     new = commands.add_parser("new", help="Create a task and draft its discipline policy")
-    new.add_argument("--schools", required=True, help="CSV or XLSX school list")
+    new.add_argument(
+        "--schools",
+        required=True,
+        help="CSV/XLSX school list; every school requires a verified directory_url",
+    )
     new.add_argument("--discipline", required=True)
     new.add_argument("--output-dir", required=True)
     new.add_argument("--budget-usd", type=float, default=20.0)
@@ -31,6 +42,16 @@ def build_parser() -> argparse.ArgumentParser:
     new.add_argument("--no-model", action="store_true", help="Never call DeepSeek; use only supplied directory URLs and local rules")
     new.add_argument("--routine-model", default="deepseek-v4-flash")
     new.add_argument("--escalation-model", default="deepseek-v4-pro")
+
+    direct = commands.add_parser("url", help="Create and run an evidence-first task from one or more verified directory URLs")
+    direct.add_argument("directory_urls", nargs="+", help="Verified faculty or staff directory URLs")
+    direct.add_argument("--output-dir", required=True)
+    direct.add_argument("--school", default="", help="Optional school name; available when one URL is supplied")
+    direct.add_argument("--discipline", default="General Faculty")
+    direct.add_argument("--budget-usd", type=float, default=20.0)
+    direct.add_argument("--use-ai", action="store_true", help="Use the explicitly configured model only for supplied-page extraction")
+    direct.add_argument("--routine-model", default="deepseek-v4-flash")
+    direct.add_argument("--escalation-model", default="deepseek-v4-pro")
 
     policy = commands.add_parser("policy", help="Show or confirm a task policy")
     policy.add_argument("--task", required=True)
@@ -45,6 +66,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start or resume a review-only generation; completed rows are preserved",
     )
     reprocess_reviews.add_argument("--task", required=True)
+
+    reopen_unresolved = commands.add_parser(
+        "reopen-unresolved",
+        help="Explicitly reopen unresolved rows after a rule, source, or access change",
+    )
+    reopen_unresolved.add_argument("--task", required=True)
+    reopen_unresolved.add_argument("--candidate", type=int, nargs="+", required=True)
+    reopen_unresolved.add_argument("--reason", required=True)
 
     status = commands.add_parser("status", help="Print task status")
     status.add_argument("--task", required=True)
@@ -73,9 +102,12 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s: %(message)s",
     )
     database = WorkflowDatabase(args.database)
-    service = WorkflowService(database)
+    service = WorkflowService(database, provider=provider_from_args(args) or DeepSeekProvider(api_key=""))
     try:
         if args.command == "new":
+            ai_enabled = args.ai_provider != "local" and not args.no_model
+            routine_model = args.ai_model or args.routine_model
+            escalation_model = args.ai_model or args.escalation_model
             task_id = service.create_task(
                 schools_path=args.schools,
                 discipline=args.discipline,
@@ -83,11 +115,25 @@ def main(argv: list[str] | None = None) -> int:
                 budget_usd=args.budget_usd,
                 history_paths=args.history,
                 processed_school_paths=args.processed_schools,
-                generate_ai_policy=not (args.no_ai_policy or args.no_model),
-                routine_model="local-only" if args.no_model else args.routine_model,
-                escalation_model="local-only" if args.no_model else args.escalation_model,
+                generate_ai_policy=ai_enabled and not args.no_ai_policy,
+                routine_model=routine_model if ai_enabled else "local-only",
+                escalation_model=escalation_model if ai_enabled else "local-only",
             )
             _print({"task_id": task_id, "policy": json.loads(database.get_policy(task_id).to_json()), "status": database.summary(task_id)})
+        elif args.command == "url":
+            if args.use_ai and args.ai_provider == "local":
+                raise ValueError("--use-ai requires --ai-provider deepseek or compatible")
+            task_id = service.create_direct_url_task(
+                directory_urls=args.directory_urls,
+                output_dir=args.output_dir,
+                school_name=args.school,
+                discipline=args.discipline,
+                use_ai=args.use_ai,
+                routine_model=args.ai_model or args.routine_model,
+                escalation_model=args.ai_model or args.escalation_model,
+                budget_usd=args.budget_usd,
+            )
+            _print(service.run_task(task_id))
         elif args.command == "policy":
             if args.confirm:
                 if not args.file:
@@ -99,6 +145,10 @@ def main(argv: list[str] | None = None) -> int:
             _print(service.run_task(args.task))
         elif args.command == "reprocess-reviews":
             _print(service.run_review_generation(args.task))
+        elif args.command == "reopen-unresolved":
+            _print(service.reopen_unresolved(
+                args.task, candidate_ids=args.candidate, reason=args.reason
+            ))
         elif args.command == "status":
             _print(database.summary(args.task))
         elif args.command == "export":
@@ -123,6 +173,20 @@ def main(argv: list[str] | None = None) -> int:
         logging.error("%s", exc)
         return 1
     return 0
+
+
+def provider_from_args(args: argparse.Namespace):
+    if args.ai_provider == "local":
+        return None
+    api_key = os.environ.get(args.ai_key_env, "")
+    if args.ai_provider == "deepseek":
+        config = (
+            ProviderConfiguration(True, "deepseek", args.ai_base_url, args.ai_model or "deepseek-v4-flash")
+            if args.ai_base_url else ProviderConfiguration.deepseek(model=args.ai_model or "deepseek-v4-flash")
+        )
+        return DeepSeekProvider(api_key=api_key, endpoint=config.endpoint)
+    config = ProviderConfiguration(True, "compatible", args.ai_base_url, args.ai_model)
+    return OpenAICompatibleProvider(api_key=api_key, endpoint=config.endpoint)
 
 
 def _parse_edits(values: list[str]) -> dict[str, str]:

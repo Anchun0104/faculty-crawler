@@ -301,6 +301,17 @@ class WorkflowService:
             summary = self.database.summary(task_id)
         return {"generation": dict(generation), "summary": summary}
 
+    def reopen_unresolved(
+        self,
+        task_id: str,
+        *,
+        candidate_ids: list[int],
+        reason: str,
+    ) -> dict[str, Any]:
+        count, school_ids = self.database.reopen_unresolved(task_id, candidate_ids, reason)
+        summary = self.run_task(task_id, school_ids=school_ids) if school_ids else self.database.summary(task_id)
+        return {"reopened": count, "school_ids": list(school_ids), "summary": summary}
+
     def begin_access_verification(self, review_id: int) -> None:
         review = self._access_review(review_id)
         self.fetcher.begin_interactive_verification(str(review["url"]))

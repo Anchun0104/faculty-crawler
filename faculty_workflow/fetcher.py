@@ -42,6 +42,21 @@ class AccessBlockedError(FetchError):
 
 
 @dataclass(frozen=True)
+class FetchPolicy:
+    timeout_ms: int
+    max_attempts: int
+    expand_directory: bool = False
+
+    @classmethod
+    def directory(cls) -> "FetchPolicy":
+        return cls(30_000, 3, True)
+
+    @classmethod
+    def person_profile(cls) -> "FetchPolicy":
+        return cls(10_000, 1, False)
+
+
+@dataclass(frozen=True)
 class FetchedPage:
     requested_url: str
     final_url: str
@@ -100,7 +115,13 @@ class PageFetcher:
         snapshot_dir: str | Path,
         *,
         expand_directory: bool = False,
+        policy: FetchPolicy | None = None,
     ) -> FetchedPage:
+        active_policy = policy or FetchPolicy(
+            timeout_ms=self.timeout_ms,
+            max_attempts=self.max_attempts,
+            expand_directory=expand_directory,
+        )
         parsed = urlparse(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise FetchError(f"Invalid URL: {url}")
@@ -117,7 +138,7 @@ class PageFetcher:
             raise FetchError("Playwright is not installed") from exc
 
         last_error: Exception | None = None
-        for attempt in range(self.max_attempts):
+        for attempt in range(active_policy.max_attempts):
             try:
                 with sync_playwright() as playwright:
                     browser = self._launch_browser(playwright, headless=self.headless)
@@ -126,19 +147,19 @@ class PageFetcher:
                         storage_state = self._load_session(parsed.hostname or parsed.netloc)
                         context = browser.new_context(user_agent=USER_AGENT, storage_state=storage_state)
                         page = context.new_page()
-                        page.set_default_timeout(self.timeout_ms)
-                        response = page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
+                        page.set_default_timeout(active_policy.timeout_ms)
+                        response = page.goto(url, wait_until="domcontentloaded", timeout=active_policy.timeout_ms)
                         try:
                             # Directory pages may populate cards asynchronously and need the
                             # longer settling window. Personal pages are already usable after
                             # DOMContentLoaded; analytics requests otherwise make every profile
                             # pay the full ten-second timeout on some university portals.
-                            idle_timeout = 10000 if expand_directory else 2500
-                            page.wait_for_load_state("networkidle", timeout=min(self.timeout_ms, idle_timeout))
+                            idle_timeout = 10000 if active_policy.expand_directory else 2500
+                            page.wait_for_load_state("networkidle", timeout=min(active_policy.timeout_ms, idle_timeout))
                         except PlaywrightTimeoutError:
                             pass
                         page.wait_for_timeout(500)
-                        dynamic_actions = self._expand_directory(page) if expand_directory else ()
+                        dynamic_actions = self._expand_directory(page) if active_policy.expand_directory else ()
                         html = self.adapter_registry.preprocess_html(page.url, page.content())
                         title = page.title()
                         final_url = page.url
@@ -149,7 +170,7 @@ class PageFetcher:
                         browser.close()
             except PlaywrightError as exc:
                 last_error = exc
-                if attempt + 1 < self.max_attempts:
+                if attempt + 1 < active_policy.max_attempts:
                     time.sleep(retry_delay_seconds(attempt))
                     continue
                 raise FetchError(str(exc)) from exc
@@ -157,7 +178,7 @@ class PageFetcher:
             lowered = html.casefold()
             if any(marker in lowered for marker in CAPTCHA_MARKERS):
                 raise AccessBlockedError("Page requires human verification or denies access", url=url)
-            if status is not None and status >= 500 and attempt + 1 < self.max_attempts:
+            if status is not None and status >= 500 and attempt + 1 < active_policy.max_attempts:
                 time.sleep(retry_delay_seconds(attempt))
                 continue
             break
@@ -168,13 +189,17 @@ class PageFetcher:
             raise FetchError(f"HTTP {status}")
 
         raw = html.encode("utf-8", errors="replace")
+        if self.max_snapshot_bytes and len(raw) > self.max_snapshot_bytes:
+            raise FetchError(
+                f"HTML exceeds snapshot limit ({len(raw)} bytes > {self.max_snapshot_bytes} bytes)"
+            )
         digest = hashlib.sha256(raw).hexdigest()
         snapshot_root = Path(snapshot_dir)
         snapshot_root.mkdir(parents=True, exist_ok=True)
         snapshot_path = snapshot_root / f"{digest}.html.gz"
         if not snapshot_path.exists():
             with gzip.open(snapshot_path, "wb") as handle:
-                handle.write(raw[: self.max_snapshot_bytes])
+                handle.write(raw)
         return FetchedPage(
             requested_url=url,
             final_url=final_url,

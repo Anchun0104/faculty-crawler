@@ -14,6 +14,76 @@ from faculty_workflow.quality import evaluate_candidate
 
 
 class WorkflowDatabaseTests(unittest.TestCase):
+    def test_ai_usage_summary_aggregates_success_failure_tokens_and_cost(self) -> None:
+        """A usage query must include all recorded calls without changing accounting."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput("Example University")],
+                output_dir=temp_dir,
+                policy_confirmed=True,
+            )
+            database.record_api_call(
+                task_id,
+                operation="parse",
+                model="model-a",
+                response_id="r1",
+                input_tokens=100,
+                output_tokens=20,
+                estimated_cost_usd=0.04,
+                status="succeeded",
+            )
+            database.record_api_call(
+                task_id,
+                operation="parse",
+                model="model-a",
+                input_tokens=10,
+                estimated_cost_usd=0.0,
+                status="failed",
+                error="timeout",
+            )
+
+            row = database.ai_usage_summary(since=None)
+
+            self.assertEqual(
+                dict(row),
+                {
+                    "calls": 2,
+                    "succeeded": 1,
+                    "failed": 1,
+                    "input_tokens": 110,
+                    "output_tokens": 20,
+                    "estimated_cost_usd": 0.04,
+                },
+            )
+
+    def test_list_ai_usage_filters_by_task_and_applies_limit(self) -> None:
+        """Detail rows must remain task-scoped and newest-first for the usage screen."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            policy = DisciplinePolicy("Physics", ("physics",), ())
+            first_task = database.create_task(
+                policy, [SchoolInput("First University")], output_dir=temp_dir, policy_confirmed=True
+            )
+            second_task = database.create_task(
+                policy, [SchoolInput("Second University")], output_dir=temp_dir, policy_confirmed=True
+            )
+            for response_id, task_id in (("first", first_task), ("second", second_task)):
+                database.record_api_call(
+                    task_id,
+                    operation="parse",
+                    model="model-a",
+                    response_id=response_id,
+                    estimated_cost_usd=0.01,
+                    status="succeeded",
+                )
+
+            rows = database.list_ai_usage(first_task, limit=1)
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["task_id"], first_task)
+            self.assertEqual(rows[0]["response_id"], "first")
     def test_audit_counts_duplicate_active_identities(self) -> None:
         class AuditDatabase:
             def summary(self, task_id):

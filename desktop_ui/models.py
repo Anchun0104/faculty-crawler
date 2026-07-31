@@ -46,3 +46,13 @@ class AiSettingsView:
     base_url: str
     model: str
     key_configured: bool
+
+
+@dataclass(frozen=True)
+class AiUsageView:
+    calls: int
+    succeeded: int
+    failed: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float

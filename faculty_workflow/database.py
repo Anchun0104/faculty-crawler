@@ -1128,6 +1128,44 @@ class WorkflowDatabase:
                 (max(0.0, estimated_cost_usd), now, task_id),
             )
 
+    def ai_usage_summary(self, since: datetime | None) -> sqlite3.Row:
+        """Return aggregate API-call usage without altering recorded accounting."""
+        where = ""
+        params: tuple[str, ...] = ()
+        if since is not None:
+            where = "WHERE created_at >= ?"
+            params = (since.isoformat(),)
+        with closing(self.connect()) as connection:
+            return connection.execute(
+                f"""
+                SELECT COUNT(*) AS calls,
+                       COALESCE(SUM(status = 'succeeded'), 0) AS succeeded,
+                       COALESCE(SUM(status != 'succeeded'), 0) AS failed,
+                       COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                       COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                       COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd
+                FROM api_calls {where}
+                """,
+                params,
+            ).fetchone()
+
+    def list_ai_usage(self, task_id: str | None, limit: int = 200) -> list[sqlite3.Row]:
+        """Return the newest recorded API calls, optionally limited to one task."""
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+        where = ""
+        params: tuple[str | int, ...] = (limit,)
+        if task_id is not None:
+            where = "WHERE task_id = ?"
+            params = (task_id, limit)
+        with closing(self.connect()) as connection:
+            return list(
+                connection.execute(
+                    f"SELECT * FROM api_calls {where} ORDER BY created_at DESC, id DESC LIMIT ?",
+                    params,
+                ).fetchall()
+            )
+
     def set_budget(self, task_id: str, budget_usd: float) -> None:
         if budget_usd <= 0:
             raise ValueError("Budget must be greater than zero")

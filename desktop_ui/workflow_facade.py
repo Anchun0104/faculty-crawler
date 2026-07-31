@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from crawler.app_paths import AppPaths
@@ -9,7 +10,7 @@ from faculty_workflow.ai_settings import AiSettingsStore, ProviderConfiguration
 from faculty_workflow.database import WorkflowDatabase
 from faculty_workflow.models import normalize_url
 
-from .models import AiSettingsView, NewCrawlRequest, SaveAiSettings, UrlPreparation
+from .models import AiSettingsView, AiUsageView, NewCrawlRequest, SaveAiSettings, UrlPreparation
 
 if TYPE_CHECKING:
     from faculty_workflow.service import WorkflowService
@@ -70,6 +71,20 @@ class WorkflowFacade:
         configuration = self._configuration_from(command)
         self.ai_settings_store.save(configuration, command.api_key)
         return self._ai_settings_view(configuration)
+
+    def ai_usage(self) -> AiUsageView:
+        """Return the current UTC month's recorded AI usage for the settings UI."""
+        now = datetime.now(timezone.utc)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        row = self.database.ai_usage_summary(since=month_start)
+        return AiUsageView(
+            calls=int(row["calls"]),
+            succeeded=int(row["succeeded"]),
+            failed=int(row["failed"]),
+            input_tokens=int(row["input_tokens"]),
+            output_tokens=int(row["output_tokens"]),
+            estimated_cost_usd=float(row["estimated_cost_usd"]),
+        )
 
     def _ai_settings_view(self, configuration: ProviderConfiguration) -> AiSettingsView:
         return AiSettingsView(

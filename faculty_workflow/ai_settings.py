@@ -76,21 +76,34 @@ class AiSettingsStore:
         self.keys = ApiKeyStore(self.directory / "ai-key.bin", protector=protector)
 
     def load(self) -> tuple[ProviderConfiguration, str]:
+        return self.load_configuration(), self.keys.load()
+
+    def load_configuration(self) -> ProviderConfiguration:
         try:
             raw = json.loads(self.configuration_path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return ProviderConfiguration.local(), ""
+            return ProviderConfiguration.local()
         if not isinstance(raw, dict) or "api_key" in raw or set(raw) - {"enabled", "provider", "base_url", "model"}:
             raise ValueError("AI settings are invalid")
-        return ProviderConfiguration(**raw), self.keys.load()
+        return ProviderConfiguration(**raw)
 
-    def save(self, configuration: ProviderConfiguration, api_key: str) -> None:
+    def key_configured(self) -> bool:
+        """Return key presence without decrypting or returning its plaintext value."""
+        try:
+            return self.keys.path.stat().st_size > 0
+        except FileNotFoundError:
+            return False
+
+    def save(self, configuration: ProviderConfiguration, api_key: str | None) -> None:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.configuration_path.write_text(
             json.dumps(asdict(configuration), ensure_ascii=False, sort_keys=True),
             encoding="utf-8",
         )
-        self.keys.save(api_key if configuration.enabled else "")
+        if not configuration.enabled:
+            self.keys.delete()
+        elif api_key is not None:
+            self.keys.save(api_key)
 
     def delete_key(self) -> None:
         self.keys.delete()

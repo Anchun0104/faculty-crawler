@@ -175,12 +175,13 @@ class ReleasePackageTests(unittest.TestCase):
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
         guide_path = PROJECT_ROOT / "使用说明.txt"
         guide = guide_path.read_text(encoding="utf-8")
+        version = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 
         self.assertTrue(guide_path.is_file())
         self.assertIn("requirements-build.txt", readme)
         self.assertIn("build_installer.ps1", readme)
         self.assertIn(
-            "releases/download/FacultyCrawler/FacultyCrawler-Setup-2.0.0.exe",
+            f"releases/download/v{version}/FacultyCrawler-Setup-{version}.exe",
             readme,
         )
         self.assertIn("系统临时构建目录", readme)

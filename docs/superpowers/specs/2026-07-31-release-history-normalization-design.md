@@ -12,17 +12,18 @@
 ## 执行方式
 
 1. 创建带说明的不可变 Git 标签 `v1.0.0` 与 `v2.0.0`，并推送至 `origin`。
-2. 创建 GitHub Release `v1.0.0`：说明其为源码历史锚点，明确不声称存在安装包。
-3. 创建 GitHub Release `v2.0.0`：说明其对应 2.0.0 源码状态，并链接到保留的旧 `FacultyCrawler` Release 下载已存在的 2.0.0 安装包及 SHA-256。
-4. 保留旧 `FacultyCrawler` 标签和 Release，不移动、不删除、不重传其现有资产。
+2. 创建 GitHub Release `v1.0.0`：说明其为源码历史锚点，明确不声称存在历史安装包，并给出从该标签重新构建的说明。
+3. 从旧 `FacultyCrawler` Release 下载 2.0.0 的安装包、源码 ZIP 和 SHA-256 文件，保留原始文件名与字节内容。
+4. 创建 GitHub Release `v2.0.0`，重新上传上述资产，并在新 Release 下载后校验安装包和源码 ZIP 的 SHA-256。
+5. 仅在新 `v2.0.0` Release 的标签、资产名称、文件大小和 SHA-256 均正确时，删除旧 `FacultyCrawler` Release 与旧 `FacultyCrawler` 标签。
 
 ## 验收标准
 
 - GitHub 能列出 `v1.0.0` 与 `v2.0.0` 两个标签，且提交目标与本设计一致。
 - 两个语义版本均有 Release 页面。
 - `v1.0.0` Release 不误导用户下载不存在的安装包。
-- `v2.0.0` Release 明确给出旧安装包的保留下载入口与 SHA-256。
-- 旧 `FacultyCrawler` Release 保持可访问。
+- `v2.0.0` Release 包含经校验的 2.0.0 安装包、源码 ZIP 及两个 SHA-256 文件。
+- 在删除旧记录后，`FacultyCrawler` 标签和 Release 不再存在，且所有 2.0.0 资产均可从 `v2.0.0` 获取。
 
 ## 后续规则
 

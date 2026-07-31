@@ -1,6 +1,6 @@
-# Faculty Crawler 2.1.0 发布说明（待发布）
+# Faculty Crawler 2.1.0 发布说明
 
-> `v2.1.0` 标签、安装包和 GitHub Release 尚未创建。本文件说明计划发布的已实现功能；最终下载链接、文件大小和 SHA-256 只会在实际构建与校验完成后补入。
+本版本对应 [v2.1.0 Release](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0)。Release 附带 Windows 安装包、源码 ZIP 以及各自的 SHA-256 校验文件。
 
 完整版本历史请见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -29,6 +29,9 @@ review 重新处理只会运行本次 review 关联的学校。若来源、证�
 
 下一轮使用 Codex 优化时，应先检查 `outcomes`、`diagnostics.failed_sources`、`top_review_reasons`、`optimization_signals` 和 `performance`，再判断是调整超时策略、补邮箱解码、增加页面适配还是修复来源边界。
 
-## 发布前验证
+## 发布验证
 
-正式发布前需要完成：完整单元测试、Python 编译检查、源码 ZIP 内容检查、Windows 安装器构建、安装器 SHA-256 计算，以及真实 Windows UI/安装 smoke test。完成后才创建 `v2.1.0` 标签、上传资产并将本说明从“待发布”更新为正式 Release 内容。
+- 完整单元测试、Python 编译检查和源码 ZIP 内容检查通过。
+- Windows 安装器已从本版本候选提交重新构建，并确认包含旧爬虫、`faculty_workflow.service` 和 `pypdf`。
+- 安装器 SHA-256 以 Release 中的 `FacultyCrawler-Setup-2.1.0.sha256.txt` 为准；源码 ZIP SHA-256 以 `faculty-crawler-windows.sha256.txt` 为准。
+- 真实 Windows UI、安装与卸载 smoke test 仍建议在最终使用环境完成。

@@ -2,7 +2,7 @@
 
 本文件是功能变更的完整索引。版本状态、下载资产与 Git 标签以对应的 GitHub Release 为准。
 
-## 2.1.0（待发布）
+## 2.1.0（已发布）
 
 ### 新增
 
@@ -27,7 +27,7 @@
 
 ### 发布状态
 
-- 尚未创建 `v2.1.0` 标签、GitHub Release 或正式安装包。发布前必须完成完整测试、源码包检查、Windows 安装器构建和 SHA-256 校验。
+- 标签：[v2.1.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0)。该 Release 提供 Windows 安装包、源码 ZIP 与对应 SHA-256 校验文件。
 
 ## 2.0.0（已发布）
 

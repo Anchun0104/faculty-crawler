@@ -10,9 +10,9 @@
 | --- | --- | --- |
 | [v1.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v1.0.0) | 已归档的源码基线 | 基础目录采集、Excel 导出和桌面/命令行入口；没有可验证的历史安装包，但可从该标签重建。 |
 | [v2.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.0.0) | 当前稳定安装包版本 | 离线多语言职称翻译与分类、人工复核、内置 Chromium 和离线翻译组件。 |
-| 2.1.0 | 待发布的证据工作流版本 | 统一直接 URL 与 XLSX 任务、官方证据和快照、PDF/二级页面、轻量邮箱解码、快速路径、有限 review、运行报告和可选兼容 AI。 |
+| [v2.1.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0) | 当前正式版本 | 统一直接 URL 与 XLSX 任务、官方证据和快照、PDF/二级页面、轻量邮箱解码、快速路径、有限 review、运行报告和可选兼容 AI。 |
 
-完整的逐版本功能记录请见 [CHANGELOG.md](CHANGELOG.md)。2.1.0 在通过完整验证、构建安装包并创建 `v2.1.0` Release 前不会提供下载链接。
+完整的逐版本功能记录请见 [CHANGELOG.md](CHANGELOG.md)。2.1.0 的安装包、源码包和 SHA-256 校验文件均附在 [v2.1.0 Release](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0)。
 
 ### 选择使用方式
 
@@ -120,7 +120,7 @@
 
 ### Windows 普通用户
 
-发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.0.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/v2.0.0/FacultyCrawler-Setup-2.0.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。2.1.0 正在准备发布，正式资产出现前请继续使用这个已验证版本。
+发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.1.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/v2.1.0/FacultyCrawler-Setup-2.1.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。
 
 当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
 

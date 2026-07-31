@@ -179,7 +179,7 @@ try {
         throw "Unable to inspect the PyInstaller archive."
     }
     $ArchiveText = $ArchiveListing -join "`n"
-    foreach ($RequiredModule in @("crawler.faculty_crawler", "ui.controller")) {
+    foreach ($RequiredModule in @("crawler.faculty_crawler", "ui.controller", "faculty_workflow.service", "pypdf")) {
         if ($ArchiveText -notmatch [regex]::Escape($RequiredModule)) {
             throw "The application bundle is missing required module $RequiredModule."
         }

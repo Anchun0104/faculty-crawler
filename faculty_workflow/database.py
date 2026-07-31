@@ -22,7 +22,7 @@ from faculty_workflow.models import (
 )
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class WorkflowDatabase:
@@ -104,6 +104,10 @@ class WorkflowDatabase:
                     official_boundary TEXT NOT NULL DEFAULT '',
                     fetch_state TEXT NOT NULL DEFAULT 'queued',
                     stop_reason TEXT NOT NULL DEFAULT '',
+                    fetch_duration_ms INTEGER NOT NULL DEFAULT 0,
+                    fetch_attempts INTEGER NOT NULL DEFAULT 0,
+                    cache_hit_count INTEGER NOT NULL DEFAULT 0,
+                    dynamic_actions_json TEXT NOT NULL DEFAULT '[]',
                     UNIQUE(task_id, normalized_url)
                 );
                 CREATE TABLE IF NOT EXISTS access_reviews (
@@ -216,6 +220,10 @@ class WorkflowDatabase:
             self._ensure_column(connection, "sources", "official_boundary", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "sources", "fetch_state", "TEXT NOT NULL DEFAULT 'queued'")
             self._ensure_column(connection, "sources", "stop_reason", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(connection, "sources", "fetch_duration_ms", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "sources", "fetch_attempts", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "sources", "cache_hit_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(connection, "sources", "dynamic_actions_json", "TEXT NOT NULL DEFAULT '[]'")
             self._ensure_column(connection, "candidates", "title_translated", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "candidates", "title_language", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(connection, "candidates", "translation_status", "TEXT NOT NULL DEFAULT 'not_needed'")
@@ -431,8 +439,18 @@ class WorkflowDatabase:
             "official", "final_url", "http_status", "content_hash", "snapshot_path",
             "fetched_at", "failure_reason", "source_type", "discovered_from", "depth",
             "official_boundary", "fetch_state", "stop_reason",
+            "fetch_duration_ms", "fetch_attempts", "cache_hit_count", "dynamic_actions_json",
         }
         self._update("sources", source_id, values, allowed, timestamp=False)
+
+    def record_source_cache_hit(self, source_id: int) -> None:
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE sources SET cache_hit_count = cache_hit_count + 1 WHERE id = ?",
+                (source_id,),
+            )
+            if cursor.rowcount != 1:
+                raise KeyError(f"Unknown sources id: {source_id}")
 
     def list_sources(self, task_id: str, school_id: int | None = None) -> list[sqlite3.Row]:
         query = "SELECT * FROM sources WHERE task_id = ?"

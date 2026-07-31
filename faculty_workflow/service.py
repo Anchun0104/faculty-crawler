@@ -460,7 +460,7 @@ class WorkflowService:
             try:
                 cached_source = self.database.find_source(task_id, profile_url)
                 profile_page = (
-                    _load_cached_source_page(cached_source, profile_url)
+                    self._load_cached_source_page(cached_source, profile_url)
                     if cached_source is not None else None
                 )
                 if profile_page is None:
@@ -651,7 +651,7 @@ class WorkflowService:
                 try:
                     cached_source = self.database.find_source(task_id, profile_url)
                     page = (
-                        _load_cached_source_page(cached_source, profile_url)
+                        self._load_cached_source_page(cached_source, profile_url)
                         if cached_source is not None else None
                     )
                     if page is None:
@@ -690,7 +690,7 @@ class WorkflowService:
             def fetch_email_source(url: str) -> FetchedPage:
                 cached_source = self.database.find_source(task_id, url)
                 cached_page = (
-                    _load_cached_source_page(cached_source, url)
+                    self._load_cached_source_page(cached_source, url)
                     if cached_source is not None else None
                 )
                 if cached_page is not None:
@@ -826,6 +826,12 @@ class WorkflowService:
             url, snapshot_dir, expand_directory=policy.expand_directory
         )
 
+    def _load_cached_source_page(self, source: Any, requested_url: str) -> FetchedPage | None:
+        page = _load_cached_source_page(source, requested_url)
+        if page is not None:
+            self.database.record_source_cache_hit(int(source["id"]))
+        return page
+
     def _collect_directory_seeds(
         self,
         task_id: str,
@@ -852,7 +858,7 @@ class WorkflowService:
                 return list(discovered_sources.values())
             visited.add(normalized)
             try:
-                page = _load_cached_source_page(current_source, next_url)
+                page = self._load_cached_source_page(current_source, next_url)
                 if page is None:
                     page = self._fetch_with_policy(
                         next_url, snapshot_dir, FetchPolicy.directory()
@@ -1038,6 +1044,9 @@ class WorkflowService:
             fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             failure_reason="",
             fetch_state="fetched",
+            fetch_duration_ms=page.fetch_duration_ms,
+            fetch_attempts=page.fetch_attempts,
+            dynamic_actions_json=json.dumps(page.dynamic_actions),
         )
 
     def _save_profile_fetch_review(
@@ -1351,6 +1360,9 @@ def _load_cached_source_page(source: Any, requested_url: str) -> FetchedPage | N
         snapshot_path = Path(str(source["snapshot_path"] or ""))
         if not snapshot_path.is_file():
             return None
+        fetch_duration_ms = _source_metric(source, "fetch_duration_ms")
+        fetch_attempts = _source_metric(source, "fetch_attempts", default=1)
+        dynamic_actions = _source_dynamic_actions(source)
         if snapshot_path.suffix.casefold() == ".pdf":
             if snapshot_path.stat().st_size > 20_000_000:
                 return None
@@ -1364,6 +1376,9 @@ def _load_cached_source_page(source: Any, requested_url: str) -> FetchedPage | N
                 text=text,
                 content_hash=str(source["content_hash"] or ""),
                 snapshot_path=snapshot_path,
+                dynamic_actions=dynamic_actions,
+                fetch_duration_ms=fetch_duration_ms,
+                fetch_attempts=fetch_attempts,
             )
         with gzip.open(snapshot_path, "rb") as handle:
             html = handle.read().decode("utf-8", errors="replace")
@@ -1378,9 +1393,29 @@ def _load_cached_source_page(source: Any, requested_url: str) -> FetchedPage | N
             text=html_to_text(html),
             content_hash=str(source["content_hash"] or ""),
             snapshot_path=snapshot_path,
+            dynamic_actions=dynamic_actions,
+            fetch_duration_ms=fetch_duration_ms,
+            fetch_attempts=fetch_attempts,
         )
     except (KeyError, OSError, PdfDocumentError):
         return None
+
+
+def _source_metric(source: Any, field: str, *, default: int = 0) -> int:
+    try:
+        return max(0, int(source[field] or default))
+    except (KeyError, TypeError, ValueError):
+        return default
+
+
+def _source_dynamic_actions(source: Any) -> tuple[str, ...]:
+    try:
+        decoded = json.loads(str(source["dynamic_actions_json"] or "[]"))
+    except (KeyError, TypeError, json.JSONDecodeError):
+        return ()
+    if not isinstance(decoded, list):
+        return ()
+    return tuple(str(item) for item in decoded if item)
 
 
 def _apply_relevance_rule(

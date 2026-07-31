@@ -1962,8 +1962,8 @@ def _package_version(package_name: str) -> str:
 
 
 def main() -> None:
-    app = DesktopApp()
-    app.mainloop()
+    from workflow_desktop import main as workflow_main
+    workflow_main()
 
 
 if __name__ == "__main__":

@@ -6,15 +6,17 @@ import queue
 import threading
 import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog, messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
 from typing import Any, Callable
 
+from crawler.app_paths import AppPaths
+from faculty_workflow.ai_settings import AiSettingsStore, ProviderConfiguration
 from faculty_workflow.database import WorkflowDatabase
 from faculty_workflow.models import DisciplinePolicy
+from faculty_workflow.providers import DeepSeekProvider
 from faculty_workflow.service import WorkflowService
 
-
-DATABASE_PATH = Path(__file__).resolve().parent / "workflow_data" / "workflow.db"
+REVIEW_VISIBLE_STATUSES = ("review", "candidate", "unresolved")
 
 
 class WorkflowDesktopApp(tk.Tk):
@@ -23,8 +25,12 @@ class WorkflowDesktopApp(tk.Tk):
         self.title("通用专业教授自动采集系统")
         self.geometry("1180x800")
         self.minsize(980, 680)
-        self.database = WorkflowDatabase(DATABASE_PATH)
-        self.service = WorkflowService(self.database)
+        self.app_paths = AppPaths.for_user()
+        self.workflow_root = self.app_paths.root / "workflow"
+        self.database = WorkflowDatabase(self.workflow_root / "workflow.db")
+        self.ai_settings = AiSettingsStore(self.app_paths.settings / "workflow-ai")
+        self.ai_configuration, self.ai_key = self.ai_settings.load()
+        self.service = self._make_service()
         self.events: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.current_task = tk.StringVar()
         self.status_text = tk.StringVar(value="请新建或载入任务。")
@@ -40,8 +46,10 @@ class WorkflowDesktopApp(tk.Tk):
         api_state = "已检测到 DEEPSEEK_API_KEY" if os.environ.get("DEEPSEEK_API_KEY") else "未配置 DEEPSEEK_API_KEY"
         ttk.Label(header, text=api_state).pack(side=tk.RIGHT)
 
+        ttk.Button(header, text="AI settings", command=self._open_ai_settings).pack(side=tk.RIGHT)
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self.direct_tab = ttk.Frame(notebook, padding=10)
         self.new_tab = ttk.Frame(notebook, padding=10)
         self.progress_tab = ttk.Frame(notebook, padding=10)
         self.review_tab = ttk.Frame(notebook, padding=10)
@@ -50,11 +58,85 @@ class WorkflowDesktopApp(tk.Tk):
         notebook.add(self.progress_tab, text="2. 运行进度")
         notebook.add(self.review_tab, text="3. 人工复核")
         notebook.add(self.export_tab, text="4. 导出审计")
+        notebook.add(self.direct_tab, text="Direct URL")
+        self._build_direct_tab()
         self._build_new_tab()
         self._build_progress_tab()
         self._build_review_tab()
         self._build_export_tab()
         ttk.Label(self, textvariable=self.status_text, anchor=tk.W).pack(fill=tk.X, padx=10, pady=(0, 8))
+
+    def _make_service(self) -> WorkflowService:
+        provider = self.ai_settings.build_provider(self.ai_configuration, self.ai_key)
+        return WorkflowService(self.database, provider=provider or DeepSeekProvider(api_key=""))
+
+    def _open_ai_settings(self) -> None:
+        dialog = tk.Toplevel(self)
+        dialog.title("AI settings")
+        provider = tk.StringVar(value=self.ai_configuration.provider if self.ai_configuration.enabled else "deepseek")
+        base_url = tk.StringVar(value=self.ai_configuration.base_url)
+        model = tk.StringVar(value=self.ai_configuration.model or "deepseek-v4-flash")
+        api_key = tk.StringVar(value="")
+        for row, (label, variable, show) in enumerate((("Provider", provider, ""), ("Base URL", base_url, ""), ("Model", model, ""), ("API key", api_key, "*"))):
+            ttk.Label(dialog, text=label).grid(row=row, column=0, sticky=tk.W, padx=8, pady=5)
+            ttk.Entry(dialog, textvariable=variable, show=show).grid(row=row, column=1, sticky=tk.EW, padx=8, pady=5)
+        def save() -> None:
+            selected = provider.get().strip()
+            config = ProviderConfiguration.deepseek(model=model.get().strip()) if selected == "deepseek" and not base_url.get().strip() else ProviderConfiguration(True, selected, base_url.get().strip(), model.get().strip())
+            self.ai_settings.save(config, api_key.get() or self.ai_key)
+            self.ai_configuration, self.ai_key = self.ai_settings.load()
+            self.service = self._make_service()
+            dialog.destroy()
+        def local() -> None:
+            self.ai_settings.save(ProviderConfiguration.local(), "")
+            self.ai_configuration, self.ai_key = self.ai_settings.load()
+            self.service = self._make_service()
+            dialog.destroy()
+        def test_connection() -> None:
+            selected = provider.get().strip()
+            config = ProviderConfiguration.deepseek(model=model.get().strip()) if selected == "deepseek" and not base_url.get().strip() else ProviderConfiguration(True, selected, base_url.get().strip(), model.get().strip())
+            self._background("ai_test", lambda: self.ai_settings.test_connection(config, api_key.get() or self.ai_key))
+        def delete_key() -> None:
+            self.ai_settings.delete_key()
+            self.ai_key = ""
+            api_key.set("")
+        ttk.Button(dialog, text="Save", command=save).grid(row=4, column=0, padx=8, pady=8, sticky=tk.EW)
+        ttk.Button(dialog, text="Local mode", command=local).grid(row=4, column=1, padx=8, pady=8, sticky=tk.EW)
+        ttk.Button(dialog, text="Test connection", command=test_connection).grid(row=5, column=0, padx=8, pady=(0, 8), sticky=tk.EW)
+        ttk.Button(dialog, text="Delete saved key", command=delete_key).grid(row=5, column=1, padx=8, pady=(0, 8), sticky=tk.EW)
+        dialog.columnconfigure(1, weight=1)
+
+    def _build_direct_tab(self) -> None:
+        self.direct_urls = tk.StringVar()
+        self.direct_school = tk.StringVar()
+        self.direct_discipline = tk.StringVar(value="General Faculty")
+        self.direct_output_dir = tk.StringVar(value=str(Path.cwd() / "workflow_output"))
+        self.direct_budget = tk.StringVar(value="20")
+        self.direct_use_ai = tk.BooleanVar(value=False)
+        fields = (("Verified directory URLs (; separated)", self.direct_urls), ("School override (one URL only)", self.direct_school), ("Discipline", self.direct_discipline), ("Output directory", self.direct_output_dir), ("Budget USD", self.direct_budget))
+        for row, (label, variable) in enumerate(fields):
+            ttk.Label(self.direct_tab, text=label).grid(row=row, column=0, sticky=tk.W, pady=5)
+            ttk.Entry(self.direct_tab, textvariable=variable).grid(row=row, column=1, sticky=tk.EW, padx=6)
+        ttk.Button(self.direct_tab, text="Choose", command=lambda: self._pick_dir(self.direct_output_dir)).grid(row=3, column=2)
+        ttk.Checkbutton(self.direct_tab, text="Use configured AI for supplied-page parsing only", variable=self.direct_use_ai).grid(row=5, column=0, columnspan=3, sticky=tk.W)
+        ttk.Label(self.direct_tab, text="AI never searches for, guesses, or replaces a directory URL; it never guesses an email.", wraplength=700).grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=8)
+        ttk.Button(self.direct_tab, text="Create and run evidence task", command=self._run_direct_task).grid(row=7, column=0, columnspan=3, sticky=tk.EW)
+        self.direct_tab.columnconfigure(1, weight=1)
+
+    def _run_direct_task(self) -> None:
+        try:
+            budget = float(self.direct_budget.get())
+        except ValueError:
+            messagebox.showerror("Budget", "Budget must be a number")
+            return
+        if self.direct_use_ai.get() and not self.ai_configuration.enabled:
+            messagebox.showerror("AI", "AI is disabled. Configure a provider before enabling it.")
+            return
+        urls = [item.strip() for item in self.direct_urls.get().replace("\n", ";").split(";") if item.strip()]
+        def create_and_run() -> tuple[str, dict[str, Any]]:
+            task_id = self.service.create_direct_url_task(directory_urls=urls, output_dir=self.direct_output_dir.get(), school_name=self.direct_school.get(), discipline=self.direct_discipline.get(), use_ai=self.direct_use_ai.get(), routine_model=self.ai_configuration.model or "deepseek-v4-flash", escalation_model=self.ai_configuration.model or "deepseek-v4-pro", budget_usd=budget)
+            return task_id, self.service.run_task(task_id)
+        self._background("direct_run", create_and_run)
 
     def _build_new_tab(self) -> None:
         self.school_path = tk.StringVar()
@@ -81,6 +163,12 @@ class WorkflowDesktopApp(tk.Tk):
             row=len(fields), column=0, columnspan=3, sticky=tk.W, pady=(4, 0)
         )
         self.new_tab.columnconfigure(1, weight=1)
+        ttk.Label(
+            self.new_tab,
+            text="Required: every school row must provide a verified directory_url.\nAI never searches for or guesses directory URLs.",
+            justify=tk.LEFT,
+            wraplength=300,
+        ).grid(row=0, column=3, rowspan=2, sticky=tk.NW, padx=(8, 0))
         ttk.Button(self.new_tab, text="生成任务与专业口径草案", command=self._create_task).grid(
             row=len(fields) + 1, column=0, columnspan=3, sticky=tk.EW, pady=8
         )
@@ -166,6 +254,11 @@ class WorkflowDesktopApp(tk.Tk):
         self.evidence_text.pack(fill=tk.BOTH, expand=True, pady=8)
         decisions = ttk.Frame(self.review_tab)
         decisions.pack(fill=tk.X)
+        ttk.Button(
+            decisions,
+            text="Reopen unresolved",
+            command=self._reopen_unresolved,
+        ).pack(side=tk.RIGHT)
         ttk.Button(decisions, text="保存并接受", command=lambda: self._decide("accepted")).pack(side=tk.LEFT)
         ttk.Button(decisions, text="拒绝", command=lambda: self._decide("rejected")).pack(side=tk.LEFT, padx=6)
         ttk.Button(decisions, text="继续保留复核", command=lambda: self._decide("review")).pack(side=tk.LEFT)
@@ -276,8 +369,15 @@ class WorkflowDesktopApp(tk.Tk):
                 "", tk.END, iid=str(row["id"]),
                 values=(row["id"], row["school"], row["url"], row["reason"], row["status"]),
             )
-        for row in self.database.list_candidates(task_id, ["review", "candidate"]):
-            self.review_tree.insert("", tk.END, iid=str(row["id"]), values=(row["id"], row["name"], row["school"], row["email"], row["normalized_title"], row["review_reason"]))
+        for row in self.database.list_candidates(task_id, REVIEW_VISIBLE_STATUSES):
+            self.review_tree.insert(
+                "", tk.END,
+                iid=str(row["id"]),
+                values=(
+                    row["id"], row["name"], row["school"], row["email"],
+                    row["normalized_title"], f"{row['status']}: {row['review_reason']}",
+                ),
+            )
 
     def _show_review(self, _event: object | None = None) -> None:
         selected = self.review_tree.selection()
@@ -309,6 +409,37 @@ class WorkflowDesktopApp(tk.Tk):
         self.database.reprocess_candidate(int(selected[0]))
         self.status_text.set("该记录已标记为旧版本，学校已回到 pending；请继续运行任务。")
         self._refresh_all()
+
+    def _reopen_unresolved(self) -> None:
+        selected = self.review_tree.selection()
+        if not selected:
+            messagebox.showinfo("Reopen unresolved", "Select an unresolved record first.")
+            return
+        candidate_id = int(selected[0])
+        row = next(
+            row for row in self.database.list_candidates(self.current_task.get())
+            if row["id"] == candidate_id
+        )
+        if row["status"] != "unresolved":
+            messagebox.showinfo("Reopen unresolved", "Only unresolved records can be reopened.")
+            return
+        reason = simpledialog.askstring(
+            "Reopen unresolved",
+            "Describe the changed rule, official URL, or access condition:",
+            parent=self,
+        )
+        if not reason or not reason.strip():
+            return
+        task_id = self._task_id()
+        if task_id:
+            self._background(
+                "reopen_unresolved",
+                lambda: self.service.reopen_unresolved(
+                    task_id,
+                    candidate_ids=[candidate_id],
+                    reason=reason.strip(),
+                ),
+            )
 
     def _retry_access_review(self) -> None:
         selected = self.access_tree.selection()
@@ -382,8 +513,18 @@ class WorkflowDesktopApp(tk.Tk):
             elif kind == "run":
                 self.status_text.set("任务运行结束。")
                 self._refresh_all()
+            elif kind == "direct_run":
+                task_id, _summary = payload
+                self.current_task.set(task_id)
+                self.status_text.set("Direct URL task finished. Review and export are available in the remaining tabs.")
+                self._refresh_all()
+            elif kind == "ai_test":
+                self.status_text.set(f"AI connection succeeded: {payload.model}")
             elif kind == "review_generation":
                 self.status_text.set("复核队列重新处理完成；已完成记录保持不变。")
+                self._refresh_all()
+            elif kind == "reopen_unresolved":
+                self.status_text.set(f"Reopened {payload['reopened']} unresolved record(s).")
                 self._refresh_all()
             elif kind == "export":
                 self.status_text.set("导出完成。")

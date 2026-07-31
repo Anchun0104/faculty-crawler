@@ -36,6 +36,47 @@ class RunReporterTests(unittest.TestCase):
             self.assertIn("email_missing_dominates_review", {item["code"] for item in report["optimization_signals"]})
             self.assertIn("profile_timeouts_dominate", {item["code"] for item in report["optimization_signals"]})
 
+    def test_report_aggregates_fetch_duration_retries_and_dynamic_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database = WorkflowDatabase(Path(temp_dir) / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                [SchoolInput("Example University", official_domain="example.edu")],
+                output_dir=temp_dir,
+                policy_confirmed=True,
+            )
+            school = database.list_schools(task_id)[0]
+            directory = database.add_source(
+                task_id, school["id"], "https://example.edu/faculty", "faculty_directory"
+            )
+            profile = database.add_source(
+                task_id, school["id"], "https://example.edu/ada", "person_profile"
+            )
+            database.update_source(
+                directory,
+                fetch_state="fetched",
+                fetch_duration_ms=12_000,
+                fetch_attempts=2,
+                cache_hit_count=3,
+                dynamic_actions_json='["load_more", "scroll_end"]',
+                stop_reason="dynamic_no_new_results",
+            )
+            database.update_source(
+                profile,
+                fetch_state="fetched",
+                fetch_duration_ms=850,
+                fetch_attempts=1,
+            )
+
+            report = RunReporter().build(database, task_id)
+
+            directory_metrics = report["performance"]["by_source_type"]["faculty_directory"]
+            self.assertEqual(directory_metrics["fetch_duration_ms"], 12_000)
+            self.assertEqual(directory_metrics["retry_count"], 1)
+            self.assertEqual(directory_metrics["cache_hits"], 3)
+            self.assertEqual(report["performance"]["dynamic_actions"], {"load_more": 1, "scroll_end": 1})
+            self.assertEqual(report["performance"]["dynamic_stop_reasons"], {"dynamic_no_new_results": 1})
+
 
 if __name__ == "__main__":
     unittest.main()

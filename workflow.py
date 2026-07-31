@@ -78,7 +78,7 @@ def build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", help="Print task status")
     status.add_argument("--task", required=True)
 
-    export = commands.add_parser("export", help="Export final, review, and audit files")
+    export = commands.add_parser("export", help="Export final, review, and run-report files")
     export.add_argument("--task", required=True)
     export.add_argument("--output-dir")
 

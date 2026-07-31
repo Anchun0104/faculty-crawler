@@ -9,6 +9,7 @@ from faculty_workflow.providers import (
     DeepSeekProvider,
     InvalidStructuredOutputError,
     MissingAPIKeyError,
+    OpenAICompatibleProvider,
     ProviderError,
     ProviderResult,
     _parse_chat_completion_json,
@@ -80,6 +81,36 @@ class DeepSeekProviderTests(unittest.TestCase):
                 model="deepseek-v4-pro", response_id="", input_tokens=0, output_tokens=0,
                 tool_calls=0, estimated_cost_usd=0,
             )), "deepseek-v4-flash")
+
+
+class OpenAICompatibleProviderTests(unittest.TestCase):
+    def test_uses_configured_chat_completions_endpoint_without_discovery(self) -> None:
+        captured = []
+
+        def transport(payload):
+            captured.append(payload)
+            return {
+                "id": "compatible-1", "model": "custom-model",
+                "usage": {"prompt_tokens": 12, "completion_tokens": 8},
+                "choices": [{"message": {"content": json.dumps({
+                    "discipline": "Physics", "include_topics": ["physics"], "exclude_topics": [],
+                    "allowed_titles": ["Professor"], "title_mappings": [], "prompt_version": "v1",
+                })}}],
+            }
+
+        provider = OpenAICompatibleProvider(
+            api_key="test-key",
+            endpoint="https://compatible.example/v1/chat/completions",
+            transport=transport,
+            retries=0,
+        )
+        result = provider.generate_policy("Physics", "custom-model")
+
+        self.assertEqual(result.model, "custom-model")
+        self.assertEqual(captured[0]["response_format"], {"type": "json_object"})
+        self.assertNotIn("thinking", captured[0])
+        with self.assertRaisesRegex(ProviderError, "disabled"):
+            provider.discover_sources("Example University", policy_from_result(result), "custom-model")
 
 
 if __name__ == "__main__":

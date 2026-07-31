@@ -412,6 +412,73 @@ Page text:
             raise ProviderError(f"DeepSeek HTTP {exc.code}: {body}") from exc
 
 
+class OpenAICompatibleProvider(DeepSeekProvider):
+    """Chat Completions JSON provider for endpoints explicitly configured by the user."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        endpoint: str,
+        timeout: int = 120,
+        retries: int = 2,
+        transport: Any | None = None,
+    ) -> None:
+        self.api_key = api_key if api_key is not None else os.environ.get("OPENAI_API_KEY", "")
+        self.endpoint = endpoint
+        self.timeout = timeout
+        self.retries = retries
+        self.transport = transport or self._http_transport
+
+    def _call(
+        self,
+        *,
+        operation: str,
+        model: str,
+        prompt: str,
+        schema_name: str,
+        schema: dict[str, Any],
+        max_output_tokens: int,
+    ) -> ProviderResult:
+        if not self.api_key:
+            raise MissingAPIKeyError("API key is not configured")
+        schema_prompt = json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": "Return one valid JSON object only, without markdown. The object must match this JSON schema exactly: " + schema_prompt},
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+            "max_tokens": max_output_tokens,
+        }
+        last_error: Exception | None = None
+        for attempt in range(self.retries + 1):
+            try:
+                response = self.transport(payload)
+                data = _parse_chat_completion_json(response)
+                usage = response.get("usage") or {}
+                return ProviderResult(
+                    data=data,
+                    model=str(response.get("model") or model),
+                    response_id=str(response.get("id") or ""),
+                    input_tokens=int(usage.get("prompt_tokens") or 0),
+                    output_tokens=int(usage.get("completion_tokens") or 0),
+                    tool_calls=0,
+                    estimated_cost_usd=0.0,
+                )
+            except (HTTPError, URLError, TimeoutError, ProviderError, json.JSONDecodeError) as exc:
+                last_error = exc
+                if attempt >= self.retries or isinstance(exc, MissingAPIKeyError):
+                    break
+                time.sleep(2**attempt)
+        raise ProviderError(f"Compatible API {operation} failed after {self.retries + 1} attempts: {last_error}")
+
+    def discover_sources(self, school: str, policy: DisciplinePolicy, model: str, *, max_results: int = 10) -> ProviderResult:
+        raise ProviderError("Compatible API source discovery is disabled. Provide an official directory URL.")
+
+
 def policy_from_result(result: ProviderResult) -> DisciplinePolicy:
     data = dict(result.data)
     mappings = data.get("title_mappings")

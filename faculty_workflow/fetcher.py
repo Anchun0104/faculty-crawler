@@ -67,6 +67,8 @@ class FetchedPage:
     content_hash: str
     snapshot_path: Path
     dynamic_actions: tuple[str, ...] = ()
+    fetch_duration_ms: int = 0
+    fetch_attempts: int = 1
 
 
 @dataclass
@@ -117,6 +119,7 @@ class PageFetcher:
         expand_directory: bool = False,
         policy: FetchPolicy | None = None,
     ) -> FetchedPage:
+        started_at = time.monotonic()
         active_policy = policy or FetchPolicy(
             timeout_ms=self.timeout_ms,
             max_attempts=self.max_attempts,
@@ -128,7 +131,7 @@ class PageFetcher:
         self._check_robots(url)
         self._throttle(parsed.hostname or parsed.netloc)
         if parsed.path.casefold().endswith(".pdf"):
-            return self._fetch_pdf(url, snapshot_dir)
+            return self._fetch_pdf(url, snapshot_dir, started_at=started_at)
 
         try:
             from playwright.sync_api import Error as PlaywrightError
@@ -210,9 +213,17 @@ class PageFetcher:
             content_hash=digest,
             snapshot_path=snapshot_path,
             dynamic_actions=dynamic_actions,
+            fetch_duration_ms=max(0, int((time.monotonic() - started_at) * 1000)),
+            fetch_attempts=attempt + 1,
         )
 
-    def _fetch_pdf(self, url: str, snapshot_dir: str | Path) -> FetchedPage:
+    def _fetch_pdf(
+        self,
+        url: str,
+        snapshot_dir: str | Path,
+        *,
+        started_at: float | None = None,
+    ) -> FetchedPage:
         request = Request(
             url,
             headers={"User-Agent": USER_AGENT, "Accept": "application/pdf"},
@@ -253,6 +264,7 @@ class PageFetcher:
             text=text,
             content_hash=digest,
             snapshot_path=snapshot_path,
+            fetch_duration_ms=max(0, int((time.monotonic() - (started_at or time.monotonic())) * 1000)),
         )
 
     def _expand_directory(self, page: object) -> tuple[str, ...]:

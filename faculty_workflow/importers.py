@@ -44,6 +44,10 @@ def load_schools(path: str | Path) -> list[SchoolInput]:
             raise ValueError(f"Duplicate school in input: {name}")
         seen.add(key)
         directory_url = _value(row, DIRECTORY_ALIASES)
+        if not directory_url:
+            raise ValueError(
+                f"directory_url is required for {name}; AI does not search for or guess directory URLs"
+            )
         official_domain = _value(row, DOMAIN_ALIASES).lower()
         if not official_domain and directory_url:
             official_domain = (urlparse(directory_url).hostname or "").lower()

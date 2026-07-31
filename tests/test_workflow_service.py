@@ -1020,6 +1020,9 @@ class WorkflowServiceTests(unittest.TestCase):
                 content_hash="saved-hash",
                 snapshot_path=str(snapshot),
                 fetch_state="fetched",
+                fetch_duration_ms=12_000,
+                fetch_attempts=2,
+                dynamic_actions_json='["load_more"]',
             )
             service = WorkflowService(
                 database,
@@ -1039,6 +1042,11 @@ class WorkflowServiceTests(unittest.TestCase):
             )
 
             self.assertIn("https://example.edu/ada", seeds)
+            persisted = database.list_sources(task_id, school_id)[0]
+            self.assertEqual(persisted["fetch_duration_ms"], 12_000)
+            self.assertEqual(persisted["fetch_attempts"], 2)
+            self.assertEqual(persisted["dynamic_actions_json"], '["load_more"]')
+            self.assertEqual(persisted["cache_hit_count"], 1)
 
     def test_linked_official_research_source_persists_graph_metadata(self) -> None:
         class LinkedFetcher(FakeFetcher):

@@ -23,6 +23,7 @@ class DataTable(QTableWidget):
         self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(40)
+        self.horizontalHeader().setDefaultSectionSize(36)
         self.horizontalHeader().setStretchLastSection(True)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.itemSelectionChanged.connect(self._emit_selection)

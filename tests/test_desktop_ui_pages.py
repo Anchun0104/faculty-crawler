@@ -156,3 +156,22 @@ class DesktopPageTests(unittest.TestCase):
         from desktop_ui.widgets.data_table import DataTable
         table = DataTable(("Value",))
         self.assertFalse(table.showGrid())
+        self.assertEqual(table.verticalHeader().defaultSectionSize(), 40)
+        self.assertEqual(table.horizontalHeader().defaultSectionSize(), 36)
+
+    def test_empty_state_has_a_line_icon_and_optional_primary_action(self):
+        from desktop_ui.widgets.empty_state import EmptyState
+
+        state = EmptyState("暂无任务", "创建一次采集即可开始。", "新建采集")
+        self.assertEqual(state.icon.accessibleName(), "空状态图标")
+        self.assertFalse(state.action_button.isHidden())
+        self.assertEqual(state.action_button.text(), "新建采集")
+
+    def test_page_header_exposes_one_primary_action(self):
+        from desktop_ui.pages import PageHeader
+
+        header = PageHeader("任务", "管理采集队列、状态与输出。", "新建采集")
+        self.assertEqual(header.title.text(), "任务")
+        self.assertEqual(header.description.text(), "管理采集队列、状态与输出。")
+        self.assertEqual(header.primary_button.text(), "新建采集")
+        self.assertFalse(header.primary_button.isHidden())

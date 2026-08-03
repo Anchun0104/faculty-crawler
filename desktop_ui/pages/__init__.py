@@ -10,5 +10,6 @@ from .sessions import SessionsPage
 from .storage import StoragePage
 from .tasks import TasksPage
 from .verification import VerificationPage
+from desktop_ui.widgets.page_header import PageHeader
 
-__all__ = ("OverviewPage", "RunsPage", "SessionsPage", "StoragePage", "TasksPage", "VerificationPage")
+__all__ = ("OverviewPage", "PageHeader", "RunsPage", "SessionsPage", "StoragePage", "TasksPage", "VerificationPage")

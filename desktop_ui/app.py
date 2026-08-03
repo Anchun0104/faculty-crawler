@@ -27,7 +27,9 @@ def build_workflow_facade() -> WorkflowFacade:
     configuration, api_key = settings.load()
     provider = settings.build_provider(configuration, api_key)
     service = WorkflowService(database, provider=provider or DeepSeekProvider(api_key=""))
-    return WorkflowFacade(service, database, settings, paths)
+    facade = WorkflowFacade(service, database, settings, paths)
+    facade.recover_interrupted_tasks()
+    return facade
 
 
 def _resolve_facade(

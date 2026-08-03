@@ -42,6 +42,17 @@ class WorkflowFacade:
             )
         )
 
+    def recover_interrupted_tasks(self) -> tuple[str, ...]:
+        """Return desktop tasks left running by a previous unexpected exit to ready."""
+        interrupted = tuple(
+            str(task["id"])
+            for task in self.database.list_tasks(limit=200)
+            if str(task["status"]) == "running"
+        )
+        for task_id in interrupted:
+            self.database.recover_interrupted_task(task_id)
+        return interrupted
+
     def prepare_urls(self, raw: str) -> UrlPreparation:
         valid_urls: list[str] = []
         duplicate_lines: list[tuple[int, str]] = []

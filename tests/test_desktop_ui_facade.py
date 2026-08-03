@@ -9,6 +9,7 @@ from desktop_ui.models import NewCrawlRequest, SaveAiSettings
 from desktop_ui.workflow_facade import WorkflowFacade
 from faculty_workflow.ai_settings import AiSettingsStore, ProviderConfiguration
 from faculty_workflow.database import WorkflowDatabase
+from faculty_workflow.models import DisciplinePolicy, SchoolInput
 
 
 class ReversibleProtector:
@@ -87,6 +88,21 @@ class WorkflowFacadeTests(unittest.TestCase):
             self.service.commands[0]["directory_urls"],
             ("https://a.edu/faculty", "https://b.edu/people"),
         )
+
+    def test_recover_interrupted_tasks_returns_running_tasks_to_ready(self) -> None:
+        task_id = self.database.create_task(
+            DisciplinePolicy("Physics", ("physics",), ()),
+            (SchoolInput(name="Example", directory_url="https://example.edu/faculty"),),
+            output_dir=self.paths.reports,
+            budget_usd=1,
+            policy_confirmed=True,
+        )
+        self.database.update_task(task_id, status="running")
+
+        recovered = self.facade.recover_interrupted_tasks()
+
+        self.assertEqual(recovered, (task_id,))
+        self.assertEqual(self.database.get_task(task_id)["status"], "ready")
 
     def test_save_ai_settings_retains_existing_key_when_key_is_omitted(self) -> None:
         self.settings.save(ProviderConfiguration.deepseek(), "secret-key")

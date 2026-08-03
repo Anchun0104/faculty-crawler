@@ -1,6 +1,7 @@
 param(
     [string]$PythonExecutable = "python",
-    [string]$InnoCompiler = ""
+    [string]$InnoCompiler = "",
+    [switch]$ReuseBuildEnvironment
 )
 
 $ErrorActionPreference = "Stop"
@@ -75,7 +76,9 @@ function Remove-TaskBuildDirectory {
 }
 
 New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
-Remove-TaskBuildDirectory -Path $BuildEnvironment
+if (-not $ReuseBuildEnvironment) {
+    Remove-TaskBuildDirectory -Path $BuildEnvironment
+}
 Remove-TaskBuildDirectory -Path $ApplicationDistRoot
 Remove-TaskBuildDirectory -Path $PyInstallerWorkRoot
 Remove-TaskBuildDirectory -Path $TranslationModelsRoot
@@ -116,9 +119,11 @@ Set-Content -LiteralPath $VersionResource -Value $VersionResourceContent -Encodi
 
 Push-Location $ProjectRoot
 try {
-    & $PythonExecutable -m venv $BuildEnvironment
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to create the clean build environment."
+    if (-not $ReuseBuildEnvironment) {
+        & $PythonExecutable -m venv $BuildEnvironment
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to create the clean build environment."
+        }
     }
 
     & $PythonExecutable -m pip --python $BuildPython install `
@@ -137,9 +142,12 @@ try {
     $env:PLAYWRIGHT_BROWSERS_PATH = $BrowserRoot
     $env:FACULTY_CRAWLER_BROWSER_SOURCE = $BrowserRoot
     $env:FACULTY_CRAWLER_VERSION_FILE = $VersionResource
-    & $BuildPython -m playwright install chromium
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to install task-specific Playwright Chromium."
+    $ExistingChrome = Get-ChildItem -LiteralPath $BrowserRoot -Filter "chrome.exe" -File -Recurse
+    if (-not $ExistingChrome) {
+        & $BuildPython -m playwright install chromium
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to install task-specific Playwright Chromium."
+        }
     }
 
     & $BuildPython -m PyInstaller --noconfirm --clean `

@@ -174,6 +174,18 @@ class WorkflowFacade:
     def resolve_verification(self, review_id: str, *, retry: bool) -> None:
         self.database.resolve_access_review(int(review_id), retry=retry)
 
+    def begin_verification(self, review_id: str) -> None:
+        """Launch the existing visible-browser verification flow off the GUI thread."""
+        self.service.begin_access_verification(int(review_id))
+
+    def finish_verification(self, review_id: str) -> None:
+        """Persist a user-completed verification; no CAPTCHA automation is involved."""
+        self.service.finish_access_verification(int(review_id))
+
+    def run_task(self, task_id: str, *, on_progress=None) -> dict[str, object]:
+        """Run the established batch workflow; callers must invoke this from a worker."""
+        return dict(self.service.run_task(task_id, on_progress=on_progress))
+
     def session_rows(self) -> tuple[dict[str, object], ...]:
         store = getattr(getattr(self.service, "fetcher", None), "session_store", None)
         if store is None or not hasattr(store, "list"):

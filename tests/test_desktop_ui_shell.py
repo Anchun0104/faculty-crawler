@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -37,6 +38,9 @@ class DesktopUiShellTests(unittest.TestCase):
         QTest.qWaitForWindowExposed(self.window)
 
     def tearDown(self) -> None:
+        self.window.worker_pool.shutdown()
+        APP.processEvents()
+        self.window._close_when_idle = False
         self.window.close()
 
     def test_shell_has_six_primary_destinations(self) -> None:
@@ -110,6 +114,26 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertTrue(self.window.background_status.is_compact())
         self.assertFalse(self.window.background_status.visible_text_label().isVisible())
         self.assertIn("Idle", self.window.background_status.toolTip())
+
+    def test_request_close_with_active_work_can_minimize_to_tray(self) -> None:
+        release = threading.Event()
+        self.window.worker_pool.submit(lambda: release.wait(1))
+        self.assertTrue(self.window.worker_pool.has_active_work())
+
+        self.assertFalse(self.window.request_close("minimize"))
+        self.assertTrue(self.window.isHidden())
+        release.set()
+        self.window.worker_pool.wait_for_done(1000)
+        APP.processEvents()
+
+    def test_request_close_after_current_defers_exit_until_workers_are_idle(self) -> None:
+        release = threading.Event()
+        self.window.worker_pool.submit(lambda: release.wait(1))
+        self.assertFalse(self.window.request_close("after_current"))
+        self.assertTrue(self.window.close_when_idle())
+        release.set()
+        self.window.worker_pool.wait_for_done(1000)
+        APP.processEvents()
 
 
 if __name__ == "__main__":

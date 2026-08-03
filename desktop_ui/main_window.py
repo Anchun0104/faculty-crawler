@@ -5,14 +5,17 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from PySide6.QtCore import QSignalBlocker, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
+    QMenu,
     QStackedWidget,
+    QSystemTrayIcon,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +30,7 @@ from .pages.runs import RunsPage
 from .pages.sessions import SessionsPage
 from .tokens import LIGHT_TOKENS
 from .widgets.status_badge import BackgroundStatus, StatusBadge
+from .workers import WorkerPool
 
 
 class MainWindow(QMainWindow):
@@ -40,9 +44,12 @@ class MainWindow(QMainWindow):
         ("System", ("settings",)),
     )
 
-    def __init__(self, facade: object, parent: QWidget | None = None) -> None:
+    def __init__(self, facade: object, parent: QWidget | None = None, *, worker_pool: WorkerPool | None = None) -> None:
         super().__init__(parent)
         self.facade = facade
+        self.worker_pool = worker_pool or WorkerPool(self)
+        self._close_when_idle = False
+        self._waiting_for_verification = False
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -51,6 +58,7 @@ class MainWindow(QMainWindow):
         self._settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         self._settings_shortcut.setContext(Qt.WindowShortcut)
         self._settings_shortcut.activated.connect(lambda: self.navigate("settings"))
+        self._connect_worker_signals()
         self.navigate("overview")
 
     def _build_shell(self) -> None:
@@ -66,6 +74,24 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_navigation())
         layout.addWidget(self._build_content(), 1)
         self.setCentralWidget(root)
+        self._build_tray()
+
+    def _build_tray(self) -> None:
+        self.tray_icon = QSystemTrayIcon(self.windowIcon(), self)
+        self.tray_icon.setToolTip("Faculty Crawler")
+        menu = QMenu(self)
+        restore = QAction("Restore Faculty Crawler", menu)
+        restore.triggered.connect(self.restore_from_tray)
+        menu.addAction(restore)
+        exit_action = QAction("Exit after current task", menu)
+        exit_action.triggered.connect(lambda: self.request_close("after_current"))
+        menu.addAction(exit_action)
+        self.tray_icon.setContextMenu(menu)
+        self.tray_icon.activated.connect(lambda _reason: self.restore_from_tray())
+
+    def _connect_worker_signals(self) -> None:
+        self.worker_pool.active_changed.connect(self._update_background_status)
+        self.worker_pool.verification_required.connect(self._verification_required)
 
     def _build_navigation(self) -> QFrame:
         self._navigation = QFrame(self)
@@ -151,6 +177,7 @@ class MainWindow(QMainWindow):
         if page_id in page_types:
             page = page_types[page_id](self.facade, self.page_stack)
             setattr(self, f"{page_id}_page", page)
+            self._connect_page_intents(page_id, page)
             return page
         page = QWidget(self.page_stack)
         page_layout = QVBoxLayout(page)
@@ -160,6 +187,53 @@ class MainWindow(QMainWindow):
         page_layout.addWidget(heading)
         page_layout.addStretch(1)
         return page
+
+    def _connect_page_intents(self, page_id: str, page: QWidget) -> None:
+        if page_id == "overview":
+            page.new_crawl_requested.connect(self._open_new_crawl)
+        elif page_id == "verification":
+            page.start_requested.connect(lambda review_id: self._submit_verification_start(review_id))
+            page.defer_requested.connect(
+                lambda review_id: self._submit(
+                    lambda: self.facade.resolve_verification(review_id, retry=False)
+                )
+            )
+            page.complete_requested.connect(lambda review_id: self._submit_verification_finish(review_id))
+        elif page_id == "sessions":
+            page.clear_requested.connect(lambda hostname: self._submit(lambda: self.facade.clear_session(hostname)))
+
+    def _open_new_crawl(self) -> None:
+        from .dialogs.new_crawl import NewCrawlDialog
+
+        dialog = NewCrawlDialog(self.facade, parent=self)
+        dialog.open()
+        self._new_crawl_dialog = dialog
+
+    def _submit_verification_start(self, review_id: str) -> None:
+        self._waiting_for_verification = True
+        self._submit(lambda: self.facade.begin_verification(review_id))
+
+    def _submit_verification_finish(self, review_id: str) -> None:
+        self._waiting_for_verification = False
+        self._submit(lambda: self.facade.finish_verification(review_id))
+
+    def _submit(self, command) -> None:
+        self.worker_pool.submit(command)
+
+    def _verification_required(self, _review_id: str) -> None:
+        self._waiting_for_verification = True
+        self._update_background_status(self.worker_pool.has_active_work())
+
+    def _update_background_status(self, active: bool) -> None:
+        if active:
+            self.set_background_status(BackgroundStatus.RUNNING)
+        elif self._waiting_for_verification:
+            self.set_background_status(BackgroundStatus.WAITING_FOR_VERIFICATION)
+        else:
+            self.set_background_status(BackgroundStatus.IDLE)
+        if not active and self._close_when_idle:
+            self._close_when_idle = False
+            self.close()
 
     def page_ids(self) -> tuple[str, ...]:
         return self._PAGE_IDS
@@ -220,6 +294,53 @@ class MainWindow(QMainWindow):
 
     def background_status_text(self) -> str:
         return self.background_status.status_text()
+
+    def request_close(self, choice: str | None = None) -> bool:
+        """Return whether the native close event may proceed without losing active work."""
+        if not self.worker_pool.has_active_work():
+            self.tray_icon.hide()
+            return True
+        selected = choice or self._ask_close_choice()
+        if selected == "minimize":
+            self.minimize_to_tray()
+            return False
+        if selected == "after_current":
+            self._close_when_idle = True
+            self.worker_pool.request_stop_after_current()
+        return False
+
+    def _ask_close_choice(self) -> str:
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Background work is active")
+        dialog.setText("A crawl is still running. Choose how to continue.")
+        minimize = dialog.addButton("Minimize to tray", QMessageBox.ActionRole)
+        after_current = dialog.addButton("Exit after current task", QMessageBox.AcceptRole)
+        dialog.addButton(QMessageBox.Cancel)
+        dialog.exec()
+        if dialog.clickedButton() is minimize:
+            return "minimize"
+        if dialog.clickedButton() is after_current:
+            return "after_current"
+        return "cancel"
+
+    def minimize_to_tray(self) -> None:
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray_icon.show()
+        self.hide()
+
+    def restore_from_tray(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def close_when_idle(self) -> bool:
+        return self._close_when_idle
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name
+        if self.request_close():
+            event.accept()
+        else:
+            event.ignore()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override name
         super().resizeEvent(event)

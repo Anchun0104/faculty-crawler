@@ -76,6 +76,7 @@ class MainWindow(QMainWindow):
         self._escape_shortcut.setContext(Qt.ApplicationShortcut)
         self._escape_shortcut.activated.connect(self._escape_context)
         self._connect_worker_signals()
+        self.settings_page.ai_page.budget_input.setValue(self._default_budget_usd)
         self.navigate("overview")
 
     def _build_shell(self) -> None:
@@ -301,7 +302,9 @@ class MainWindow(QMainWindow):
         if self._verification_start_pending:
             self._waiting_for_verification = True
             self._verification_start_pending = False
-        if isinstance(_result, dict) and _result and all(isinstance(value, Path) for value in _result.values()):
+        if isinstance(_result, Path):
+            self.operation_info.set_message(f"Background operation completed. Output: {_result}")
+        elif isinstance(_result, dict) and _result and all(isinstance(value, Path) for value in _result.values()):
             locations = ", ".join(str(value) for value in _result.values())
             self.operation_info.set_message(f"Background operation completed. Output: {locations}")
         else:

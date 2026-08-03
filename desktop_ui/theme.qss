@@ -17,7 +17,7 @@ QPushButton#primaryButton { background: @PRIMARY@; color: white; border: 0; bord
 QPushButton#primaryButton:hover { background: #1769AA; }
 QPushButton#dangerButton { color: #B42318; border: 1px solid #F1C4C1; border-radius: 6px; padding: 7px 14px; }
 #infoBar { background: #EEF6FD; color: #1E4D73; }
-#inspector { border-left: 1px solid #E5EAF0; }
+#taskInspector, #verificationInspector { border-left: 1px solid #E5EAF0; background: rgba(255, 255, 255, 0.92); }
 
 QPushButton:focus,
 QToolButton:focus,

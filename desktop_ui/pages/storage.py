@@ -32,7 +32,7 @@ class StoragePage(QWidget):
         self.export_button = QPushButton("Export diagnostics", actions); self.export_button.setObjectName("primaryButton"); self.export_button.clicked.connect(self.diagnostics_export_requested); rows.addWidget(self.export_button)
         self.clear_temp_button = QPushButton("Clear temporary data", actions); self.clear_temp_button.clicked.connect(self._confirm_temporary_clear); rows.addWidget(self.clear_temp_button)
         self.clear_internal_button = QPushButton("Clear internal data", actions); self.clear_internal_button.setObjectName("dangerButton"); self.clear_internal_button.clicked.connect(self._confirm_internal_clear); rows.addWidget(self.clear_internal_button)
-        self.clear_internal_button.setToolTip("Clears sessions, run artifacts, logs and diagnostics; preserves task history, workflow database and exported Excel files.")
+        self.clear_internal_button.setToolTip("Clears sessions, run artifacts and logs; preserves diagnostic ZIPs, task history, workflow database and exported Excel files.")
         layout.addWidget(actions); layout.addStretch(1); self.refresh()
 
     def refresh(self) -> None:

@@ -117,6 +117,21 @@ class DesktopPageTests(unittest.TestCase):
         page = StoragePage(FakeFacade())
         self.assertIn("workflow database", page.clear_internal_button.toolTip())
 
+    def test_internal_clear_confirmation_states_diagnostic_zips_are_preserved(self):
+        from desktop_ui.pages.storage import StoragePage
+
+        page = StoragePage(FakeFacade())
+        captured: list[str] = []
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(lambda *_args: (captured.append(_args[2]), QMessageBox.No)[1])
+        try:
+            page._confirm_internal_clear()
+        finally:
+            QMessageBox.question = original
+
+        self.assertIn("Diagnostic ZIPs", captured[0])
+        self.assertIn("workflow database", captured[0])
+
     def test_task_export_emits_the_selected_completed_batch(self):
         from desktop_ui.pages.tasks import TasksPage
         page = TasksPage(FakeFacade())

@@ -40,7 +40,7 @@ class StoragePage(QWidget):
         self.usage_label.setText(_format_bytes(int(summary.get("bytes", 0)))); self.file_count_label.setText(f"{int(summary.get('files', 0))} files")
 
     def _confirm_internal_clear(self) -> None:
-        if QMessageBox.question(self, "Clear internal data", "This clears local sessions, run metadata, logs and diagnostics. Exported Excel files are kept. Continue?") == QMessageBox.Yes:
+        if QMessageBox.question(self, "Clear internal data", "This clears local sessions, run artifacts and logs. Diagnostic ZIPs, task history, workflow database and exported Excel files are preserved. Continue?") == QMessageBox.Yes:
             self.clear_internal_requested.emit()
 
     def _confirm_temporary_clear(self) -> None:

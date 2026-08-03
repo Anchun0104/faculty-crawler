@@ -34,6 +34,7 @@ def run_desktop(facade: WorkflowFacade | None = None) -> int:
     application.setApplicationName("Faculty Crawler")
     application.setStyleSheet(load_theme_qss())
     window = MainWindow(facade or build_workflow_facade())
+    application.aboutToQuit.connect(window.shutdown)
     window.resize(1440, 900)
     window.show()
     return application.exec()

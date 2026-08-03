@@ -115,8 +115,8 @@ class NewCrawlDialogTests(unittest.TestCase):
         self.assertFalse(self.dialog.start_button.isEnabled())
         self.assertEqual(self.dialog.validation_label.text(), "第 2、3 行 URL 无效")
 
-    def test_valid_submission_emits_and_creates_the_prepared_request(self) -> None:
-        """The start action must use the facade's normalized unique URLs."""
+    def test_valid_submission_emits_the_prepared_request_without_ui_thread_creation(self) -> None:
+        """The window owns background task creation after the dialog emits intent."""
         self.dialog.url_editor.setPlainText("https://one.edu/faculty\nhttps://one.edu/faculty")
         QTest.qWait(160)
         spy = QSignalSpy(self.dialog.requested)
@@ -124,14 +124,14 @@ class NewCrawlDialogTests(unittest.TestCase):
         self.dialog.start_button.click()
 
         self.assertEqual(spy.count(), 1)
-        self.assertEqual(len(self.facade.created_direct), 1)
+        self.assertEqual(self.facade.created_direct, [])
         self.assertEqual(
-            self.facade.created_direct[0].urls,
+            spy.at(0)[0].urls,
             ("https://one.edu/faculty",),
         )
 
-    def test_xlsx_mode_uses_the_facade_importer_validation_and_creation(self) -> None:
-        """The dialog must delegate spreadsheet handling instead of parsing it itself."""
+    def test_xlsx_mode_emits_prevalidated_source_without_ui_thread_creation(self) -> None:
+        """The dialog validates XLSX then leaves task creation to the window worker."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "schools.xlsx"
             workbook = Workbook()
@@ -145,10 +145,12 @@ class NewCrawlDialogTests(unittest.TestCase):
 
             self.assertEqual(self.dialog.summary_label.text(), "2 所学校已验证 · 将创建 1 个批次任务，包含 2 所学校")
             self.assertTrue(self.dialog.start_button.isEnabled())
+            spy = QSignalSpy(self.dialog.xlsx_requested)
             self.dialog.start_button.click()
 
-            self.assertEqual(len(self.facade.created_xlsx), 1)
-            self.assertIs(self.facade.created_xlsx[0][0], self.dialog._xlsx_schools)
+            self.assertEqual(self.facade.created_xlsx, [])
+            self.assertEqual(spy.count(), 1)
+            self.assertEqual(spy.at(0)[0], str(path))
 
     def test_multiple_urls_with_school_override_block_submission(self) -> None:
         """A school override applied to several URLs would violate service validation."""

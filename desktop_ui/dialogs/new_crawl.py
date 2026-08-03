@@ -374,11 +374,11 @@ class NewCrawlDialog(QDialog):
             if not self._url_can_start():
                 return
             request = self._request()
-            self.facade.create_direct_tasks(request)
             self.requested.emit(request)
+            self.accept()
             return
         if not self._xlsx_path or not self._xlsx_valid:
             return
         request = self._request()
-        self.facade.create_xlsx_task(self._xlsx_schools, request)
         self.xlsx_requested.emit(str(self._xlsx_path), request)
+        self.accept()

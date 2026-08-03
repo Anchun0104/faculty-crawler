@@ -30,6 +30,7 @@ from .pages.runs import RunsPage
 from .pages.sessions import SessionsPage
 from .tokens import LIGHT_TOKENS
 from .widgets.status_badge import BackgroundStatus, StatusBadge
+from .widgets.info_bar import InfoBar
 from .workers import WorkerPool
 
 
@@ -50,6 +51,8 @@ class MainWindow(QMainWindow):
         self.worker_pool = worker_pool or WorkerPool(self)
         self._close_when_idle = False
         self._waiting_for_verification = False
+        self._verification_start_pending = False
+        self._shutdown_complete = False
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -84,7 +87,7 @@ class MainWindow(QMainWindow):
         restore.triggered.connect(self.restore_from_tray)
         menu.addAction(restore)
         exit_action = QAction("Exit after current task", menu)
-        exit_action.triggered.connect(lambda: self.request_close("after_current"))
+        exit_action.triggered.connect(self.exit_after_current)
         menu.addAction(exit_action)
         self.tray_icon.setContextMenu(menu)
         self.tray_icon.activated.connect(lambda _reason: self.restore_from_tray())
@@ -92,6 +95,9 @@ class MainWindow(QMainWindow):
     def _connect_worker_signals(self) -> None:
         self.worker_pool.active_changed.connect(self._update_background_status)
         self.worker_pool.verification_required.connect(self._verification_required)
+        self.worker_pool.progress.connect(self._worker_progress)
+        self.worker_pool.succeeded.connect(self._worker_succeeded)
+        self.worker_pool.failed.connect(self._worker_failed)
 
     def _build_navigation(self) -> QFrame:
         self._navigation = QFrame(self)
@@ -153,6 +159,9 @@ class MainWindow(QMainWindow):
         title.setObjectName("shellTitle")
         title.setAccessibleName("Application title")
         layout.addWidget(title)
+        self.operation_info = InfoBar("Ready for background work.", content)
+        self.operation_info.setAccessibleName("Background operation notification")
+        layout.addWidget(self.operation_info)
         self.page_stack = QStackedWidget(content)
         self.page_stack.setAccessibleName("Main content")
         for item in NAVIGATION_ITEMS:
@@ -206,11 +215,34 @@ class MainWindow(QMainWindow):
         from .dialogs.new_crawl import NewCrawlDialog
 
         dialog = NewCrawlDialog(self.facade, parent=self)
+        dialog.requested.connect(self._start_direct_batch)
+        dialog.xlsx_requested.connect(
+            lambda _path, request, source=dialog: self._start_xlsx_batch(
+                tuple(source._xlsx_schools), request
+            )
+        )
         dialog.open()
         self._new_crawl_dialog = dialog
 
+    def _start_direct_batch(self, request) -> None:
+        self._submit(lambda context: self._create_and_run_direct(request, context))
+
+    def _start_xlsx_batch(self, schools: tuple[object, ...], request) -> None:
+        self._submit(lambda context: self._create_and_run_xlsx(schools, request, context))
+
+    def _create_and_run_direct(self, request, context):
+        task_id = self.facade.create_direct_tasks(request)
+        context.report_progress({"message": "batch_created"})
+        return self.facade.run_task(task_id, on_progress=context.report_progress)
+
+    def _create_and_run_xlsx(self, schools: tuple[object, ...], request, context):
+        task_id = self.facade.create_xlsx_task(schools, request)
+        context.report_progress({"message": "batch_created"})
+        return self.facade.run_task(task_id, on_progress=context.report_progress)
+
     def _submit_verification_start(self, review_id: str) -> None:
         self._waiting_for_verification = True
+        self._verification_start_pending = True
         self._submit(lambda: self.facade.begin_verification(review_id))
 
     def _submit_verification_finish(self, review_id: str) -> None:
@@ -222,7 +254,36 @@ class MainWindow(QMainWindow):
 
     def _verification_required(self, _review_id: str) -> None:
         self._waiting_for_verification = True
+        self._verification_start_pending = False
         self._update_background_status(self.worker_pool.has_active_work())
+
+    def _worker_progress(self, _progress: object) -> None:
+        self.operation_info.set_message("Background operation running.")
+
+    def _worker_succeeded(self, _result: object) -> None:
+        if self._verification_start_pending:
+            self._waiting_for_verification = True
+            self._verification_start_pending = False
+        self.operation_info.set_message("Background operation completed.")
+        self._refresh_after_command()
+
+    def _worker_failed(self, _message: str) -> None:
+        if self._verification_start_pending:
+            self._waiting_for_verification = False
+            self._verification_start_pending = False
+        self.operation_info.set_message("Background operation failed. Check sanitized diagnostics for details.")
+        self._refresh_after_command()
+
+    def _refresh_after_command(self) -> None:
+        for page in (
+            getattr(self, "overview_page", None),
+            getattr(self, "tasks_page", None),
+            getattr(self, "verification_page", None),
+            getattr(self, "runs_page", None),
+            getattr(self, "sessions_page", None),
+        ):
+            if page is not None:
+                page.refresh()
 
     def _update_background_status(self, active: bool) -> None:
         if active:
@@ -298,7 +359,7 @@ class MainWindow(QMainWindow):
     def request_close(self, choice: str | None = None) -> bool:
         """Return whether the native close event may proceed without losing active work."""
         if not self.worker_pool.has_active_work():
-            self.tray_icon.hide()
+            self.shutdown()
             return True
         selected = choice or self._ask_close_choice()
         if selected == "minimize":
@@ -324,9 +385,21 @@ class MainWindow(QMainWindow):
         return "cancel"
 
     def minimize_to_tray(self) -> None:
-        if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray_icon.show()
+        if not self.tray_available():
+            self.operation_info.set_message("System tray is unavailable; keep this window open while work runs.")
+            return
+        self.tray_icon.show()
         self.hide()
+
+    @staticmethod
+    def tray_available() -> bool:
+        return QSystemTrayIcon.isSystemTrayAvailable()
+
+    def exit_after_current(self) -> None:
+        if self.worker_pool.has_active_work():
+            self.request_close("after_current")
+        else:
+            self.close()
 
     def restore_from_tray(self) -> None:
         self.showNormal()
@@ -335,6 +408,14 @@ class MainWindow(QMainWindow):
 
     def close_when_idle(self) -> bool:
         return self._close_when_idle
+
+    def shutdown(self) -> None:
+        """Idempotently coordinate worker completion before Qt destroys this window."""
+        if self._shutdown_complete:
+            return
+        self._shutdown_complete = True
+        self.worker_pool.shutdown(-1)
+        self.tray_icon.hide()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override name
         if self.request_close():

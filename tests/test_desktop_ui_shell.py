@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -11,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop_ui.main_window import MainWindow
-from desktop_ui.models import AiSettingsView, AiUsageView
+from desktop_ui.models import AiSettingsView, AiUsageView, NewCrawlRequest
 from desktop_ui.pages.settings import SettingsPage
 from desktop_ui.widgets.status_badge import BackgroundStatus
 
@@ -20,6 +21,10 @@ APP = QApplication.instance() or QApplication([])
 
 
 class ShellFacade:
+    def __init__(self) -> None:
+        self.created: list[NewCrawlRequest] = []
+        self.run_progress: list[str] = []
+
     def ai_settings(self) -> AiSettingsView:
         return AiSettingsView(False, "local", "", "", False)
 
@@ -29,10 +34,33 @@ class ShellFacade:
     def ai_usage_details(self) -> tuple[object, ...]:
         return ()
 
+    def create_direct_tasks(self, request: NewCrawlRequest) -> str:
+        self.created.append(request)
+        return "task-1"
+
+    def create_xlsx_task(self, schools: tuple[object, ...], request: NewCrawlRequest) -> str:
+        self.created.append(request)
+        return "task-xlsx"
+
+    def run_task(self, task_id: str, *, on_progress):
+        on_progress({"task_id": task_id, "message": "school_started"})
+        self.run_progress.append(task_id)
+        return {"id": task_id, "status": "completed"}
+
+    def task_rows(self):
+        return ()
+
+    def verification_rows(self):
+        return ()
+
+    def session_rows(self):
+        return ()
+
 
 class DesktopUiShellTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.window = MainWindow(facade=ShellFacade())
+        self.facade = ShellFacade()
+        self.window = MainWindow(facade=self.facade)
         self.window.resize(1440, 900)
         self.window.show()
         QTest.qWaitForWindowExposed(self.window)
@@ -121,7 +149,7 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertTrue(self.window.worker_pool.has_active_work())
 
         self.assertFalse(self.window.request_close("minimize"))
-        self.assertTrue(self.window.isHidden())
+        self.assertEqual(self.window.isHidden(), self.window.tray_available())
         release.set()
         self.window.worker_pool.wait_for_done(1000)
         APP.processEvents()
@@ -134,6 +162,60 @@ class DesktopUiShellTests(unittest.TestCase):
         release.set()
         self.window.worker_pool.wait_for_done(1000)
         APP.processEvents()
+        self.assertFalse(self.window.isVisible())
+
+    def test_start_batch_creates_and_runs_in_the_worker_pool(self) -> None:
+        request = NewCrawlRequest(("https://one.edu/faculty",), output_dir="output")
+        self.window._start_direct_batch(request)
+
+        self.assertTrue(
+            self._wait_until(
+                lambda: self.facade.run_progress == ["task-1"]
+                and "completed" in self.window.operation_info.message().casefold()
+            )
+        )
+        self.assertEqual(self.facade.created, [request])
+        self.assertIn("completed", self.window.operation_info.message().casefold())
+
+    def test_failed_verification_start_rolls_back_waiting_state_and_uses_safe_message(self) -> None:
+        self.facade.begin_verification = lambda _review_id: (_ for _ in ()).throw(RuntimeError("token=secret"))
+        self.window._submit_verification_start("7")
+
+        self.assertTrue(self._wait_until(lambda: "failed" in self.window.operation_info.message().casefold()))
+        self.assertNotIn("secret", self.window.operation_info.message())
+        self.assertIn("Idle", self.window.background_status_text())
+
+    def test_minimize_choice_does_not_hide_without_a_system_tray(self) -> None:
+        original = self.window.tray_available
+        self.window.tray_available = lambda: False
+        release = threading.Event()
+        self.window.worker_pool.submit(lambda: release.wait(1))
+        try:
+            self.assertFalse(self.window.request_close("minimize"))
+            self.assertFalse(self.window.isHidden())
+        finally:
+            release.set()
+            self.window.tray_available = original
+
+    def test_shutdown_is_idempotent_and_waits_for_the_active_worker(self) -> None:
+        release = threading.Event()
+        self.window.worker_pool.submit(lambda: release.wait(1))
+        threading.Timer(0.02, release.set).start()
+
+        self.window.shutdown()
+        self.window.shutdown()
+
+        self.assertTrue(self.window.worker_pool.wait_for_done(0))
+
+    @staticmethod
+    def _wait_until(predicate, timeout_seconds: float = 2.0) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            APP.processEvents()
+            if predicate():
+                return True
+            time.sleep(0.01)
+        return False
 
 
 if __name__ == "__main__":

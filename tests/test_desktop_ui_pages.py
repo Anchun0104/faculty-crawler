@@ -57,6 +57,28 @@ class DesktopPageTests(unittest.TestCase):
         self.assertEqual(overview.task_count.text(), "1")
         self.assertEqual(runs.table.rowCount(), 1)
 
+    def test_overview_shows_live_profile_progress_with_target(self):
+        from desktop_ui.pages.overview import OverviewPage
+
+        facade = FakeFacade()
+        facade.task_rows = lambda **_kwargs: (
+            {"id": "task-1", "discipline": "Linguistics", "status": "running", "name": "Stanford", "updated_at": "now"},
+        )
+        page = OverviewPage(facade)
+
+        page.set_live_progress(
+            {
+                "task_id": "task-1",
+                "message": "profile_page_started",
+                "school_name": "Stanford Linguistics",
+                "url": "https://linguistics.stanford.edu/people/faculty/jane-doe",
+            }
+        )
+
+        self.assertIn("教师页", page.current_run_progress.text())
+        self.assertIn("Stanford Linguistics", page.current_run_progress.text())
+        self.assertIn("linguistics.stanford.edu", page.current_run_progress.text())
+
     def test_work_pages_use_chinese_headers_and_approved_composition(self):
         from desktop_ui.pages.overview import OverviewPage
         from desktop_ui.pages.tasks import TasksPage

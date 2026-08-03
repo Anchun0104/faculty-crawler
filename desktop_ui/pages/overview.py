@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from urllib.parse import urlparse
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
@@ -16,6 +19,7 @@ class OverviewPage(QWidget):
     def __init__(self, facade: object, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.facade = facade
+        self._current_task_id = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
@@ -154,15 +158,49 @@ class OverviewPage(QWidget):
 
         current = next((row for row in rows if row.get("status") == "running"), None)
         if current is None:
+            self._current_task_id = ""
             self.current_run_title.setText("暂无运行中的任务")
             self.current_run_detail.setText("后台服务空闲")
             self.current_run_progress.clear()
             self.view_task_button.setEnabled(False)
         else:
+            self._current_task_id = str(current.get("id", ""))
             self.current_run_title.setText(str(current.get("name", current.get("run_name", current.get("id", "")))))
             self.current_run_detail.setText(f"{current.get('discipline', '')} · 正在采集")
             self.current_run_progress.setText("运行中")
             self.view_task_button.setEnabled(True)
+
+    def set_live_progress(self, event: dict[str, object]) -> None:
+        """Show the latest crawler heartbeat for the task currently on screen."""
+        if str(event.get("task_id", "")) != self._current_task_id:
+            return
+        message = str(event.get("message", ""))
+        school_name = str(event.get("school_name", ""))
+        url = str(event.get("url", ""))
+        target = self._display_target(url)
+        labels = {
+            "school_started": "开始采集学校目录",
+            "directory_page_started": "正在抓取目录页",
+            "profile_page_started": "正在抓取教师页",
+            "directory_candidate_saved": "已保存目录候选记录",
+            "candidate_saved": "已保存教师记录",
+            "profile_fetch_review": "教师页需要人工复核",
+            "school_finished": "已完成学校采集",
+        }
+        description = labels.get(message, "正在处理采集任务")
+        details = " · ".join(part for part in (school_name, target) if part)
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.current_run_progress.setText(f"{timestamp} · {description}{f'：{details}' if details else ''}")
+
+    @staticmethod
+    def _display_target(url: str) -> str:
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            return ""
+        path = parsed.path.rstrip("/")
+        if len(path) > 42:
+            path = f"{path[:39]}…"
+        return f"{parsed.netloc}{path}"
 
     @staticmethod
     def _status_text(status: object) -> str:

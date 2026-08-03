@@ -248,6 +248,8 @@ class WorkflowService:
             self._cancelled_task_ids.discard(task_id)
         self.database.recover_interrupted_task(task_id)
         task = self.database.get_task(task_id)
+        if task["status"] == "cancelled":
+            return self.database.summary(task_id)
         if not task["policy_confirmed"]:
             raise PolicyNotConfirmedError("The discipline policy must be confirmed before running")
         if task["routine_model"] != LOCAL_ONLY_MODEL and isinstance(self.provider, DeepSeekProvider) and not self.provider.api_key:
@@ -265,7 +267,13 @@ class WorkflowService:
             for school in schools:
                 if self._task_cancelled(task_id):
                     return self.database.summary(task_id)
-                self._emit(on_progress, task_id, school_id=school["id"], message="school_started")
+                self._emit(
+                    on_progress,
+                    task_id,
+                    school_id=school["id"],
+                    school_name=str(school["name"]),
+                    message="school_started",
+                )
                 if self.database.is_processed_school(task_id, school["name"]):
                     self.database.update_school(school["id"], status="skipped_processed")
                     continue
@@ -287,7 +295,13 @@ class WorkflowService:
                 except Exception as exc:
                     logger.exception("School workflow failed: %s", school["name"])
                     self.database.update_school(school["id"], status="failed", failure_reason=str(exc)[:500])
-                self._emit(on_progress, task_id, school_id=school["id"], message="school_finished")
+                self._emit(
+                    on_progress,
+                    task_id,
+                    school_id=school["id"],
+                    school_name=str(school["name"]),
+                    message="school_finished",
+                )
                 if self._task_cancelled(task_id):
                     return self.database.summary(task_id)
         except Exception as exc:
@@ -410,6 +424,8 @@ class WorkflowService:
             )
         last_source_id: int | None = None
         while True:
+            if self._task_cancelled(task_id):
+                return
             node = source_graph.pop()
             if node is None:
                 break
@@ -426,6 +442,14 @@ class WorkflowService:
             )
             last_source_id = source_id
             source = self.database.get_source(source_id)
+            self._emit(
+                on_progress,
+                task_id,
+                school_id=school_id,
+                school_name=str(school["name"]),
+                url=node.url,
+                message="directory_page_started",
+            )
             discovered = self._collect_directory_seeds(
                 task_id, school_id, source, snapshot_dir, seeds, trusted_source_domain
             )
@@ -459,6 +483,8 @@ class WorkflowService:
         # candidate decisions so their exact-name facts can merge into the baseline.
         profile_failures: dict[str, str] = {}
         for seed in list(seeds.values()):
+            if self._task_cancelled(task_id):
+                return
             name = str(seed.get("name") or "")
             profile_url = str(seed.get("profile_url") or "")
             directory_fast_path = _directory_fast_path_candidate(
@@ -485,6 +511,14 @@ class WorkflowService:
                     if cached_source is not None else None
                 )
                 if profile_page is None:
+                    self._emit(
+                        on_progress,
+                        task_id,
+                        school_id=school_id,
+                        school_name=str(school["name"]),
+                        url=profile_url,
+                        message="profile_page_started",
+                    )
                     profile_page = self._fetch_with_policy(
                         profile_url, snapshot_dir, FetchPolicy.person_profile()
                     )
@@ -528,6 +562,8 @@ class WorkflowService:
                     )
 
         while True:
+            if self._task_cancelled(task_id):
+                return
             node = source_graph.pop()
             if node is None:
                 break
@@ -542,6 +578,14 @@ class WorkflowService:
                 official_boundary="official",
             )
             source = self.database.get_source(source_id)
+            self._emit(
+                on_progress,
+                task_id,
+                school_id=school_id,
+                school_name=str(school["name"]),
+                url=node.url,
+                message="directory_page_started",
+            )
             discovered = self._collect_directory_seeds(
                 task_id, school_id, source, snapshot_dir, seeds, trusted_source_domain
             )
@@ -565,6 +609,8 @@ class WorkflowService:
 
         self.database.update_school(school_id, status="extracting")
         for _, seed in seeds.items():
+            if self._task_cancelled(task_id):
+                return
             seed = dict(seed)
             profile_url = str(seed.get("profile_url") or "")
             directory_url = str(seed.get("directory_url") or "")
@@ -676,6 +722,14 @@ class WorkflowService:
                         if cached_source is not None else None
                     )
                     if page is None:
+                        self._emit(
+                            on_progress,
+                            task_id,
+                            school_id=school_id,
+                            school_name=str(school["name"]),
+                            url=profile_url,
+                            message="profile_page_started",
+                        )
                         page = self._fetch_with_policy(
                             profile_url, snapshot_dir, FetchPolicy.person_profile()
                         )

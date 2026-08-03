@@ -132,8 +132,9 @@ class TasksPage(QWidget):
         details = self.facade.task_detail(task_id) if hasattr(self.facade, "task_detail") else self._rows.get(task_id, {})
         translated = self._translated_details(details)
         self.inspector.show_details(translated)
-        self.export_button.setEnabled(str(details.get("status", "")) == "completed")
-        self.cancel_button.setEnabled(str(details.get("status", "")) == "running")
+        status = str(details.get("status", ""))
+        self.export_button.setEnabled(status in {"completed", "cancelled"})
+        self.cancel_button.setEnabled(status in {"ready", "running"})
         self.task_selected.emit(task_id)
 
     @staticmethod

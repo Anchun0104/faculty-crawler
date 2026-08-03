@@ -325,7 +325,11 @@ class MainWindow(QMainWindow):
         self._verification_start_pending = False
         self._update_background_status(self.worker_pool.has_active_work())
 
-    def _worker_progress(self, _progress: object) -> None:
+    def _worker_progress(self, progress: object) -> None:
+        if isinstance(progress, dict):
+            self.overview_page.set_live_progress(progress)
+            self.operation_info.set_message(self.overview_page.current_run_progress.text())
+            return
         self.operation_info.set_message("后台操作正在运行。")
 
     def _worker_succeeded(self, _result: object) -> None:

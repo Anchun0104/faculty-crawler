@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtCore import QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from desktop_ui.models import NewCrawlRequest, UrlPreparation
+from desktop_ui.widgets.info_bar import InfoBar
 
 if TYPE_CHECKING:
     from desktop_ui.workflow_facade import WorkflowFacade
@@ -107,7 +108,12 @@ class NewCrawlDialog(QDialog):
         self._mode = "urls"
         self._prepared_urls = UrlPreparation((), (), ())
         self._xlsx_path: Path | None = None
+        self._xlsx_schools: tuple[object, ...] = ()
         self._xlsx_valid = False
+        self._url_validation_timer = QTimer(self)
+        self._url_validation_timer.setSingleShot(True)
+        self._url_validation_timer.setInterval(125)
+        self._url_validation_timer.timeout.connect(self._refresh_url_validation)
         self.setWindowTitle("新建采集")
         self.setMinimumWidth(680)
         self._build(default_output_dir or Path.cwd() / "workflow_output")
@@ -148,6 +154,7 @@ class NewCrawlDialog(QDialog):
         details = QFormLayout()
         self.school_name_edit = QLineEdit(self)
         self.school_name_edit.setPlaceholderText("仅适用于单个 URL")
+        self.school_name_edit.textChanged.connect(self._schedule_url_validation)
         details.addRow("学校名称（可选）", self.school_name_edit)
         self.discipline_edit = QLineEdit("General Faculty", self)
         details.addRow("学科", self.discipline_edit)
@@ -171,6 +178,26 @@ class NewCrawlDialog(QDialog):
         self.validation_label.setWordWrap(True)
         layout.addWidget(self.summary_label)
         layout.addWidget(self.validation_label)
+        self.duplicate_details_button = QToolButton(self)
+        self.duplicate_details_button.setText("查看重复 URL")
+        self.duplicate_details_button.setCheckable(True)
+        self.duplicate_details_button.toggled.connect(self._set_duplicate_details_visible)
+        self.duplicate_details_label = QLabel(self)
+        self.duplicate_details_label.setObjectName("duplicateUrlDetails")
+        self.duplicate_details_label.setWordWrap(True)
+        self.duplicate_details_button.hide()
+        self.duplicate_details_label.hide()
+        layout.addWidget(self.duplicate_details_button)
+        layout.addWidget(self.duplicate_details_label)
+        self.confirmation_label = QLabel(self)
+        self.confirmation_label.setObjectName("batchConfirmation")
+        self.confirmation_label.setWordWrap(True)
+        layout.addWidget(self.confirmation_label)
+        self.compliance_info = InfoBar(
+            "请确认你有权访问这些公开页面，并遵守目标网站的服务条款与 robots 规则。",
+            self,
+        )
+        layout.addWidget(self.compliance_info)
 
         actions = QHBoxLayout()
         actions.addStretch(1)
@@ -193,7 +220,7 @@ class NewCrawlDialog(QDialog):
         self.url_editor.setAccessibleName("Directory URLs, one per line")
         self.url_editor.setPlaceholderText("https://university.edu/faculty\nhttps://school.edu/people")
         self.url_editor.setMinimumHeight(180)
-        self.url_editor.textChanged.connect(self._refresh_url_validation)
+        self.url_editor.textChanged.connect(self._schedule_url_validation)
         layout.addWidget(self.url_editor)
         return page
 
@@ -251,14 +278,39 @@ class NewCrawlDialog(QDialog):
         parts = [f"{valid_count} 个有效"]
         if duplicate_count:
             parts.append(f"{duplicate_count} 个重复已忽略")
-        parts.append(f"将创建 {valid_count} 个独立任务")
+        parts.append(f"将创建 1 个批次任务，包含 {valid_count} 所学校")
         self.summary_label.setText(" · ".join(parts))
         invalid_lines = [str(line) for line, _value in self._prepared_urls.invalid_lines]
-        self.validation_label.setText(
-            f"第 {'、'.join(invalid_lines)} 行 URL 无效" if invalid_lines else ""
+        errors = [f"第 {'、'.join(invalid_lines)} 行 URL 无效"] if invalid_lines else []
+        if valid_count > 1 and self.school_name_edit.text().strip():
+            errors.append("学校名称仅可用于单个 URL")
+        self.validation_label.setText("\n".join(errors))
+        self._set_duplicate_details(self._prepared_urls.duplicate_lines)
+        self._set_batch_confirmation(valid_count)
+        self.start_button.setText(f"开始批次（{valid_count} 所学校）")
+        self.start_button.setEnabled(self._prepared_urls.can_start and not errors)
+
+    def _schedule_url_validation(self) -> None:
+        if self._mode == "urls":
+            self._url_validation_timer.start()
+
+    def _set_duplicate_details(self, duplicates: tuple[tuple[int, str], ...]) -> None:
+        self.duplicate_details_button.setVisible(bool(duplicates))
+        self.duplicate_details_label.setText(
+            "\n".join(f"第 {line} 行：{url}" for line, url in duplicates)
         )
-        self.start_button.setText(f"开始 {valid_count} 个任务")
-        self.start_button.setEnabled(self._prepared_urls.can_start)
+        if not duplicates:
+            self.duplicate_details_button.setChecked(False)
+            self.duplicate_details_label.hide()
+
+    def _set_duplicate_details_visible(self, visible: bool) -> None:
+        self.duplicate_details_label.setVisible(visible and bool(self._prepared_urls.duplicate_lines))
+
+    def _set_batch_confirmation(self, school_count: int) -> None:
+        output_dir = self.output_dir_edit.text().strip() or "未选择输出目录"
+        self.confirmation_label.setText(
+            f"将创建 1 个批次任务，包含 {school_count} 所学校。输出目录：{output_dir}"
+        )
 
     def _refresh_xlsx_validation(self) -> None:
         if not self._xlsx_path:
@@ -267,6 +319,7 @@ class NewCrawlDialog(QDialog):
             self.validation_label.setText("")
             self.start_button.setText("开始采集")
             self.start_button.setEnabled(False)
+            self._set_batch_confirmation(0)
             return
         try:
             schools = self.facade.prepare_schools_file(self._xlsx_path)
@@ -276,11 +329,14 @@ class NewCrawlDialog(QDialog):
             self.validation_label.setText(str(error))
             self.start_button.setText("开始采集")
             self.start_button.setEnabled(False)
+            self._set_batch_confirmation(0)
             return
         self._xlsx_valid = bool(schools)
-        self.summary_label.setText(f"{len(schools)} 所学校已验证 · 将创建 1 个采集任务")
+        self._xlsx_schools = tuple(schools)
+        self.summary_label.setText(f"{len(schools)} 所学校已验证 · 将创建 1 个批次任务，包含 {len(schools)} 所学校")
         self.validation_label.setText("")
-        self.start_button.setText("开始采集")
+        self._set_batch_confirmation(len(schools))
+        self.start_button.setText(f"开始批次（{len(schools)} 所学校）")
         self.start_button.setEnabled(self._xlsx_valid)
 
     def _request(self) -> NewCrawlRequest:
@@ -303,5 +359,5 @@ class NewCrawlDialog(QDialog):
         if not self._xlsx_path or not self._xlsx_valid:
             return
         request = self._request()
-        self.facade.create_xlsx_task(self._xlsx_path, request)
+        self.facade.create_xlsx_task(self._xlsx_schools, request)
         self.xlsx_requested.emit(str(self._xlsx_path), request)

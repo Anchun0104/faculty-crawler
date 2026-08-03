@@ -72,9 +72,14 @@ class WorkflowFacade:
             raise ValueError("请选择 XLSX 文件")
         return tuple(load_schools(source))
 
-    def create_xlsx_task(self, path: str | Path, request: NewCrawlRequest) -> str:
-        """Create a workflow task from a source already validated by the importer."""
-        schools = self.prepare_schools_file(path)
+    def create_xlsx_task(
+        self,
+        schools: tuple[SchoolInput, ...],
+        request: NewCrawlRequest,
+    ) -> str:
+        """Create a task from the exact school rows validated by the XLSX picker."""
+        if not schools:
+            raise ValueError("XLSX 文件中没有可采集的学校")
         return self.service.create_task_from_schools(
             schools=schools,
             discipline=request.discipline,

@@ -4,11 +4,12 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from openpyxl import Workbook
-from PySide6.QtTest import QSignalSpy
+from PySide6.QtTest import QSignalSpy, QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop_ui.dialogs.new_crawl import NewCrawlDialog
@@ -25,9 +26,11 @@ APP = QApplication.instance() or QApplication([])
 class RecordingFacade:
     def __init__(self) -> None:
         self.created_direct: list[NewCrawlRequest] = []
-        self.created_xlsx: list[tuple[Path, NewCrawlRequest]] = []
+        self.created_xlsx: list[tuple[tuple[object, ...], NewCrawlRequest]] = []
+        self.prepare_url_calls = 0
 
     def prepare_urls(self, raw: str) -> UrlPreparation:
+        self.prepare_url_calls += 1
         valid: list[str] = []
         duplicates: list[tuple[int, str]] = []
         invalid: list[tuple[int, str]] = []
@@ -54,8 +57,8 @@ class RecordingFacade:
         self.created_direct.append(request)
         return "direct-task"
 
-    def create_xlsx_task(self, path: str | Path, request: NewCrawlRequest) -> str:
-        self.created_xlsx.append((Path(path), request))
+    def create_xlsx_task(self, schools: tuple[object, ...], request: NewCrawlRequest) -> str:
+        self.created_xlsx.append((schools, request))
         return "xlsx-task"
 
 
@@ -77,27 +80,37 @@ class NewCrawlDialogTests(unittest.TestCase):
         self.dialog.close()
 
     def test_twenty_valid_urls_enable_exact_task_count(self) -> None:
-        """A pasted 20-line list must remain uncapped and ready to submit."""
+        """A pasted 20-line list must remain uncapped in one workflow batch."""
         urls = "\n".join(f"https://school-{index}.edu/faculty" for index in range(20))
 
         self.dialog.url_editor.setPlainText(urls)
+        QTest.qWait(160)
 
-        self.assertEqual(self.dialog.summary_label.text(), "20 个有效 · 将创建 20 个独立任务")
-        self.assertEqual(self.dialog.start_button.text(), "开始 20 个任务")
+        self.assertEqual(self.dialog.summary_label.text(), "20 个有效 · 将创建 1 个批次任务，包含 20 所学校")
+        self.assertEqual(self.dialog.start_button.text(), "开始批次（20 所学校）")
         self.assertTrue(self.dialog.start_button.isEnabled())
+        self.assertIn("输出目录：output", self.dialog.confirmation_label.text())
 
     def test_duplicate_urls_are_ignored_without_blocking_valid_submission(self) -> None:
         """Removing duplicate handling would create redundant crawl work."""
         self.dialog.url_editor.setPlainText(
             "https://one.edu/faculty\nhttps://one.edu/faculty\nhttps://two.edu/people"
         )
+        QTest.qWait(160)
 
-        self.assertEqual(self.dialog.summary_label.text(), "2 个有效 · 1 个重复已忽略 · 将创建 2 个独立任务")
+        self.assertEqual(self.dialog.summary_label.text(), "2 个有效 · 1 个重复已忽略 · 将创建 1 个批次任务，包含 2 所学校")
         self.assertTrue(self.dialog.start_button.isEnabled())
+        self.dialog.duplicate_details_button.click()
+        self.assertEqual(
+            self.dialog.duplicate_details_label.text(),
+            "第 2 行：https://one.edu/faculty",
+        )
+        self.assertFalse(self.dialog.duplicate_details_label.isHidden())
 
     def test_invalid_lines_block_submission_and_name_every_line(self) -> None:
         """Submitting malformed URLs would let a partial paste silently run."""
         self.dialog.url_editor.setPlainText("https://one.edu/faculty\nwrong\nalso-wrong")
+        QTest.qWait(160)
 
         self.assertFalse(self.dialog.start_button.isEnabled())
         self.assertEqual(self.dialog.validation_label.text(), "第 2、3 行 URL 无效")
@@ -105,6 +118,7 @@ class NewCrawlDialogTests(unittest.TestCase):
     def test_valid_submission_emits_and_creates_the_prepared_request(self) -> None:
         """The start action must use the facade's normalized unique URLs."""
         self.dialog.url_editor.setPlainText("https://one.edu/faculty\nhttps://one.edu/faculty")
+        QTest.qWait(160)
         spy = QSignalSpy(self.dialog.requested)
 
         self.dialog.start_button.click()
@@ -129,12 +143,35 @@ class NewCrawlDialogTests(unittest.TestCase):
             self.dialog.select_xlsx_mode()
             self.dialog.set_xlsx_path(path)
 
-            self.assertEqual(self.dialog.summary_label.text(), "2 所学校已验证 · 将创建 1 个采集任务")
+            self.assertEqual(self.dialog.summary_label.text(), "2 所学校已验证 · 将创建 1 个批次任务，包含 2 所学校")
             self.assertTrue(self.dialog.start_button.isEnabled())
             self.dialog.start_button.click()
 
             self.assertEqual(len(self.facade.created_xlsx), 1)
-            self.assertEqual(self.facade.created_xlsx[0][0], path)
+            self.assertIs(self.facade.created_xlsx[0][0], self.dialog._xlsx_schools)
+
+    def test_multiple_urls_with_school_override_block_submission(self) -> None:
+        """A school override applied to several URLs would violate service validation."""
+        self.dialog.school_name_edit.setText("One University")
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty\nhttps://two.edu/faculty")
+        QTest.qWait(160)
+
+        self.assertFalse(self.dialog.start_button.isEnabled())
+        self.assertEqual(self.dialog.validation_label.text(), "学校名称仅可用于单个 URL")
+
+    def test_url_validation_is_debounced_after_editing(self) -> None:
+        """Calling the facade on every keystroke would make a large paste unnecessarily expensive."""
+        initial_calls = self.facade.prepare_url_calls
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty")
+
+        self.assertEqual(self.facade.prepare_url_calls, initial_calls)
+        QTest.qWait(160)
+        self.assertEqual(self.facade.prepare_url_calls, initial_calls + 1)
+
+    def test_access_compliance_infobar_is_visible_before_batch_start(self) -> None:
+        """Operators need an explicit access reminder before initiating a crawl batch."""
+        self.assertIn("robots", self.dialog.compliance_info.message())
+        self.assertFalse(self.dialog.compliance_info.isHidden())
 
     def test_facade_validates_xlsx_with_the_existing_school_importer(self) -> None:
         """A second spreadsheet parser could accept files the workflow later rejects."""
@@ -155,14 +192,17 @@ class NewCrawlDialogTests(unittest.TestCase):
                 app_paths=paths,
             )
 
-            schools = facade.prepare_schools_file(path)
-            task_id = facade.create_xlsx_task(
-                path,
-                NewCrawlRequest(urls=(), output_dir=root / "output", discipline="Physics"),
-            )
+            with patch("desktop_ui.workflow_facade.load_schools", wraps=__import__("faculty_workflow.importers", fromlist=["load_schools"]).load_schools) as importer:
+                schools = facade.prepare_schools_file(path)
+                task_id = facade.create_xlsx_task(
+                    schools,
+                    NewCrawlRequest(urls=(), output_dir=root / "output", discipline="Physics"),
+                )
 
             self.assertEqual([school.name for school in schools], ["One University"])
             self.assertEqual(task_id, "xlsx-task")
+            self.assertEqual(importer.call_count, 1)
+            self.assertIs(service.commands[0]["schools"], schools)
             self.assertEqual(
                 [school.name for school in service.commands[0]["schools"]],
                 ["One University"],

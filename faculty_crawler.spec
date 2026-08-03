@@ -14,9 +14,15 @@ version_file = Path(os.environ["FACULTY_CRAWLER_VERSION_FILE"]).resolve()
 if not version_file.is_file():
     raise SystemExit(f"Generated version resource is missing: {version_file}")
 
-hiddenimports = collect_submodules("ui") + collect_submodules("crawler") + collect_submodules("faculty_workflow")
+hiddenimports = (
+    collect_submodules("desktop_ui")
+    + collect_submodules("ui")
+    + collect_submodules("crawler")
+    + collect_submodules("faculty_workflow")
+)
 datas = [
     (str(browser_source), "ms-playwright"),
+    (str(project_root / "desktop_ui" / "theme.qss"), "desktop_ui"),
     (str(project_root / "使用说明.txt"), "."),
 ]
 

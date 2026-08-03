@@ -29,6 +29,8 @@ class HandoffFileSelectionTests(unittest.TestCase):
                 "使用说明.txt",
                 "任务转接说明.md",
                 "crawler/parsers.py",
+                "desktop_ui/app.py",
+                "desktop_ui/theme.qss",
                 "tests/test_parsers.py",
                 "docs/architecture.md",
                 "output/faculty.xlsx",

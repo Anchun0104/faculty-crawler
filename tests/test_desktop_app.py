@@ -12,6 +12,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import desktop_app
+
 from crawler.batch import CrawlTask
 from crawler.models import (
     CrawlOutcome,
@@ -41,6 +43,21 @@ from desktop_app import (
 
 
 class DesktopWorkerTests(unittest.TestCase):
+    def test_packaged_entry_uses_pyside6_by_default(self) -> None:
+        """A normal desktop launch must open the new native Qt shell."""
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("FACULTY_CRAWLER_LEGACY_UI", None)
+            entry = desktop_app.resolve_desktop_entry()
+
+        self.assertEqual(entry.__module__, "desktop_ui.app")
+
+    def test_legacy_ui_requires_explicit_environment_opt_in(self) -> None:
+        """The retained Tk fallback is never selected accidentally."""
+        with patch.dict(os.environ, {"FACULTY_CRAWLER_LEGACY_UI": "1"}, clear=True):
+            entry = desktop_app.resolve_desktop_entry()
+
+        self.assertEqual(entry.__module__, "workflow_desktop")
+
     def test_terminal_store_failure_keeps_resume_claim_recoverable(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

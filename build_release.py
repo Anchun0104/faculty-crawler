@@ -30,12 +30,13 @@ _ROOT_RELEASE_FILES = (
     Path("workflow_desktop.py"),
     Path("使用说明.txt"),
 )
-_SOURCE_PACKAGES = ("crawler", "faculty_workflow", "scripts", "tests", "ui")
+_SOURCE_PACKAGES = ("crawler", "desktop_ui", "faculty_workflow", "scripts", "tests", "ui")
 RELEASE_FILES = _ROOT_RELEASE_FILES + tuple(
     sorted(
         path.relative_to(_PROJECT_ROOT)
         for package in _SOURCE_PACKAGES
-        for path in (_PROJECT_ROOT / package).rglob("*.py")
+        for path in (_PROJECT_ROOT / package).rglob("*")
+        if path.is_file() and path.suffix in {".py", ".qss"}
     )
 )
 ARCHIVE_NAME = "faculty-crawler-windows.zip"

@@ -20,7 +20,7 @@ ROOT_FILES = {
     "使用说明.txt",
     "任务转接说明.md",
 }
-INCLUDED_DIRECTORIES = ("crawler", "tests", "docs", "output")
+INCLUDED_DIRECTORIES = ("crawler", "desktop_ui", "tests", "docs", "output")
 EXCLUDED_PARTS = {".git", ".venv", "__pycache__", "dist"}
 FIXED_ZIP_TIME = (2020, 1, 1, 0, 0, 0)
 

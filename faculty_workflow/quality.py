@@ -96,7 +96,14 @@ def _email_on_official_domain(email: str, official_domain: str) -> bool:
     if domain.startswith("www."):
         domain = domain[4:]
     email_domain = email.rsplit("@", 1)[-1].casefold()
-    return bool(domain and (email_domain == domain or email_domain.endswith("." + domain)))
+    return bool(
+        domain
+        and (
+            email_domain == domain
+            or email_domain.endswith("." + domain)
+            or domain.endswith("." + email_domain)
+        )
+    )
 
 
 def _is_non_person_name(name: str) -> bool:

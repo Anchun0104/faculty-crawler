@@ -405,6 +405,13 @@ class WorkflowDatabaseTests(unittest.TestCase):
             )
             self.assertIn("email_domain_not_official", outside_domain.reasons)
 
+            parent_domain_email = evaluate_candidate(
+                database, task_id, school["id"], school["name"],
+                CandidateExtraction(**{**identity_only.__dict__, "email": "grace@stanford.edu"}), policy,
+                official_domain="linguistics.stanford.edu",
+            )
+            self.assertNotIn("email_domain_not_official", parent_domain_email.reasons)
+
     def test_school_loader_supports_optional_seed_columns_and_rejects_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "schools.csv"

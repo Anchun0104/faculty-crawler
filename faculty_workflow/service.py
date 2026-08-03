@@ -541,6 +541,15 @@ class WorkflowService:
             self._record_fetched_source(profile_source_id, profile_page)
             if not url_is_on_domain(profile_page.final_url, trusted_source_domain):
                 continue
+            provisional = _merge_directory_card_evidence(
+                _local_profile_extraction(profile_page, seed, policy), seed, policy
+            )
+            self.database.add_candidate(
+                task_id, school_id, provisional, direction=policy.discipline,
+                source_url=profile_page.final_url, status="candidate",
+                review_reason="profile_pending_enrichment",
+            )
+            self._emit(on_progress, task_id, school_id=school_id, message="candidate_saved")
             for url, source_type in find_linked_directory_sources(
                 profile_page.html, profile_page.final_url, trusted_source_domain
             ):
@@ -614,6 +623,8 @@ class WorkflowService:
             seed = dict(seed)
             profile_url = str(seed.get("profile_url") or "")
             directory_url = str(seed.get("directory_url") or "")
+            if profile_url:
+                self.database.supersede_provisional_profile(task_id, school_id, profile_url)
             if self.database.has_accepted_candidate_name(
                 task_id, school_id, str(seed.get("name") or "")
             ):

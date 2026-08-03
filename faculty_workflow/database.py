@@ -694,6 +694,20 @@ class WorkflowDatabase:
             ).fetchall()
         return any(normalize_url(row["homepage"]) == normalized for row in rows)
 
+    def supersede_provisional_profile(self, task_id: str, school_id: int, homepage: str) -> None:
+        """Retire the early display row before writing its final enriched result."""
+        normalized = normalize_url(homepage)
+        if not normalized:
+            return
+        with self.transaction() as connection:
+            rows = connection.execute(
+                "SELECT id, homepage FROM candidates WHERE task_id = ? AND school_id = ? AND status = 'candidate' AND review_reason = 'profile_pending_enrichment'",
+                (task_id, school_id),
+            ).fetchall()
+            ids = [int(row["id"]) for row in rows if normalize_url(row["homepage"]) == normalized]
+            if ids:
+                connection.executemany("DELETE FROM candidates WHERE id = ?", [(candidate_id,) for candidate_id in ids])
+
     def has_accepted_candidate_name(self, task_id: str, school_id: int, name: str) -> bool:
         normalized = normalize_key(name)
         if not normalized:

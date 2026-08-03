@@ -153,6 +153,20 @@ class WorkflowFacadeTests(unittest.TestCase):
         self.assertNotIn("secret", detail["warning"])
         self.assertNotIn("abc", detail["error"])
 
+    def test_storage_counts_workflow_database_and_diagnostics_exports_sanitized_failures(self) -> None:
+        import zipfile
+
+        self.database.path.write_bytes(b"database")
+        self.database.list_tasks = lambda **_kwargs: ({"id": "t1", "warning": "token=secret", "error": "failed"},)
+        summary = self.facade.storage_summary()
+        report = self.facade.export_diagnostics()
+
+        self.assertGreaterEqual(summary["bytes"], len(b"database"))
+        with zipfile.ZipFile(report) as archive:
+            diagnostics = archive.read("diagnostics.json").decode("utf-8")
+        self.assertIn("failed", diagnostics)
+        self.assertNotIn("secret", diagnostics)
+
 
 if __name__ == "__main__":
     unittest.main()

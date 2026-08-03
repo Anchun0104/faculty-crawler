@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSettings, QSignalBlocker, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -27,6 +27,7 @@ from .pages.settings import SettingsPage
 from .pages.overview import OverviewPage
 from .pages.tasks import TasksPage
 from .pages.verification import VerificationPage
+from .verification_executor import VerificationExecutor
 from .pages.runs import RunsPage
 from .pages.sessions import SessionsPage
 from .tokens import LIGHT_TOKENS
@@ -50,11 +51,13 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.facade = facade
         self.worker_pool = worker_pool or WorkerPool(self)
+        self.verification_executor = VerificationExecutor(facade)
         self._close_when_idle = False
         self._waiting_for_verification = False
         self._verification_start_pending = False
         self._shutdown_complete = False
-        self._default_budget_usd = 20.0
+        self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "FacultyCrawler", "FacultyCrawler")
+        self._default_budget_usd = self._settings.value("desktop/default_budget_usd", 20.0, type=float)
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -225,7 +228,7 @@ class MainWindow(QMainWindow):
             page.start_requested.connect(lambda review_id: self._submit_verification_start(review_id))
             page.defer_requested.connect(
                 lambda review_id: self._submit(
-                    lambda: self.facade.defer_verification(review_id)
+                    lambda: self.verification_executor.submit("defer", review_id).result()
                 )
             )
             page.complete_requested.connect(lambda review_id: self._submit_verification_finish(review_id))
@@ -253,6 +256,7 @@ class MainWindow(QMainWindow):
 
     def _set_default_budget(self, value: float) -> None:
         self._default_budget_usd = float(value)
+        self._settings.setValue("desktop/default_budget_usd", self._default_budget_usd)
 
     def _start_direct_batch(self, request) -> None:
         self._submit(lambda context: self._create_and_run_direct(request, context))
@@ -276,11 +280,11 @@ class MainWindow(QMainWindow):
     def _submit_verification_start(self, review_id: str) -> None:
         self._waiting_for_verification = True
         self._verification_start_pending = True
-        self._submit(lambda: self.facade.begin_verification(review_id))
+        self._submit(lambda: self.verification_executor.submit("begin", review_id).result())
 
     def _submit_verification_finish(self, review_id: str) -> None:
         self._waiting_for_verification = False
-        self._submit(lambda: self.facade.finish_verification(review_id))
+        self._submit(lambda: self.verification_executor.submit("finish", review_id).result())
 
     def _submit(self, command) -> None:
         self.worker_pool.submit(command)
@@ -325,6 +329,8 @@ class MainWindow(QMainWindow):
     def _focus_current_search(self) -> None:
         page = self.page_stack.currentWidget()
         search = getattr(page, "search", None)
+        if search is None and page is getattr(self, "settings_page", None):
+            search = page.search_edit
         if search is not None:
             search.setFocus()
 
@@ -466,10 +472,7 @@ class MainWindow(QMainWindow):
         if self._shutdown_complete:
             return
         self._shutdown_complete = True
-        try:
-            self.facade.defer_verification("")
-        except (AttributeError, RuntimeError):
-            pass
+        self.verification_executor.shutdown()
         self.worker_pool.shutdown(-1)
         self.tray_icon.hide()
 

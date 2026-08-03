@@ -216,7 +216,9 @@ class WorkflowFacade:
         """Minimal, display-safe storage status. Detailed cleanup remains an explicit command."""
         from crawler.retention import RetentionService
         usage = RetentionService(self.app_paths).usage()
-        return {"bytes": usage.bytes, "files": usage.files}
+        database_path = Path(self.database.path)
+        database_bytes = database_path.stat().st_size if database_path.exists() else 0
+        return {"bytes": usage.bytes + database_bytes, "files": usage.files + int(database_path.exists())}
 
     def clear_temporary_data(self) -> tuple[Path, ...]:
         from crawler.retention import RetentionService
@@ -230,11 +232,18 @@ class WorkflowFacade:
 
     def export_diagnostics(self) -> Path:
         from datetime import datetime
-        from crawler.diagnostics import build_problem_report
+        from crawler.diagnostics import DiagnosticEvent, build_problem_report
 
         reports = Path(self.app_paths.reports)
         name = f"desktop-diagnostics-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.zip"
-        return build_problem_report("desktop", [], reports / name)
+        events: list[DiagnosticEvent] = []
+        for task in self.database.list_tasks(limit=500):
+            task_id = str(task["id"])
+            for category in ("warning", "error"):
+                message = str(task[category] or "").strip()
+                if message:
+                    events.append(DiagnosticEvent("desktop", task_id, "task", category, message, {}))
+        return build_problem_report("desktop", events, reports / name)
 
     @staticmethod
     def _task_row(row: object) -> dict[str, object]:

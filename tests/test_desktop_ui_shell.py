@@ -110,6 +110,16 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertEqual(self.window._find_shortcut.context(), Qt.ApplicationShortcut)
         self.assertTrue(self.window.tasks_page.search.focusPolicy() & Qt.StrongFocus)
 
+    def test_ctrl_f_focuses_settings_search_and_budget_is_persisted(self) -> None:
+        from PySide6.QtCore import QSettings
+
+        self.window.navigate("settings")
+        self.window._focus_current_search()
+        self.assertTrue(self.window.settings_page.search_edit.focusPolicy() & Qt.StrongFocus)
+        self.window._set_default_budget(37.5)
+        settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "FacultyCrawler", "FacultyCrawler")
+        self.assertEqual(settings.value("desktop/default_budget_usd", type=float), 37.5)
+
     def test_settings_navigation_uses_the_real_ai_settings_page(self) -> None:
         self.window.navigate("settings")
         self.assertIsInstance(self.window.settings_page, SettingsPage)

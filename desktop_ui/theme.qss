@@ -5,6 +5,20 @@ QWidget {
     font-size: 14px;
 }
 
+#appShell { background: #F5F7FA; }
+#contentSurface, #settingsGroup, #inspector, #infoBar, #metricCard {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #E5EAF0;
+    border-radius: 8px;
+}
+#pageHeading { font-size: 28px; font-weight: 600; color: #172033; }
+#sectionHeading { font-size: 18px; font-weight: 600; color: #172033; }
+QPushButton#primaryButton { background: @PRIMARY@; color: white; border: 0; border-radius: 6px; padding: 7px 14px; }
+QPushButton#primaryButton:hover { background: #1769AA; }
+QPushButton#dangerButton { color: #B42318; border: 1px solid #F1C4C1; border-radius: 6px; padding: 7px 14px; }
+#infoBar { background: #EEF6FD; color: #1E4D73; }
+#inspector { border-left: 1px solid #E5EAF0; }
+
 QPushButton:focus,
 QToolButton:focus,
 QLineEdit:focus,

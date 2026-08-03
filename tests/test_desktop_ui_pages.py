@@ -104,6 +104,19 @@ class DesktopPageTests(unittest.TestCase):
         page = TasksPage(FakeFacade())
         self.assertGreaterEqual(page.status_filter.findText("needs_policy_confirmation"), 0)
 
+    def test_settings_shows_only_implemented_categories(self):
+        from desktop_ui.pages.settings import SettingsPage
+
+        page = SettingsPage(FakeFacade())
+
+        self.assertEqual(tuple(page._section_buttons), ("ai", "storage"))
+
+    def test_internal_clear_copy_preserves_task_history_and_database(self):
+        from desktop_ui.pages.storage import StoragePage
+
+        page = StoragePage(FakeFacade())
+        self.assertIn("workflow database", page.clear_internal_button.toolTip())
+
     def test_task_export_emits_the_selected_completed_batch(self):
         from desktop_ui.pages.tasks import TasksPage
         page = TasksPage(FakeFacade())

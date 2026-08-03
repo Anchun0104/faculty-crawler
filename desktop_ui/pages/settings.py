@@ -34,10 +34,11 @@ class SettingsPage(QWidget):
     def __init__(self, facade: object, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.facade = facade
+        self._visible_sections = (("ai", "AI settings"), ("storage", "Storage and diagnostics"))
         self._section_indexes: dict[str, int] = {}
         self._section_buttons: dict[str, QToolButton] = {}
         self._build()
-        self.navigate("general")
+        self.navigate("ai")
 
     def _build(self) -> None:
         layout = QHBoxLayout(self)
@@ -55,7 +56,7 @@ class SettingsPage(QWidget):
         nav_layout.addWidget(nav_label)
         self._buttons = QButtonGroup(self)
         self._buttons.setExclusive(True)
-        for section_id, label in self._SECTIONS:
+        for section_id, label in self._visible_sections:
             button = QToolButton(nav)
             button.setText(label)
             button.setCheckable(True)
@@ -78,7 +79,7 @@ class SettingsPage(QWidget):
         self.search_edit.textChanged.connect(self._search_sections)
         content_layout.addWidget(self.search_edit)
         self.section_stack = QStackedWidget(content)
-        for section_id, label in self._SECTIONS:
+        for section_id, label in self._visible_sections:
             if section_id == "ai":
                 self.ai_page = AiSettingsPage(self.facade, self.section_stack)
                 self.ai_scroll = QScrollArea(self.section_stack)
@@ -124,13 +125,13 @@ class SettingsPage(QWidget):
 
     def current_section(self) -> str:
         index = self.section_stack.currentIndex()
-        return self._SECTIONS[index][0]
+        return self._visible_sections[index][0]
 
     def _search_sections(self, text: str) -> None:
         query = text.strip().casefold()
         if not query:
             return
-        for section_id, label in self._SECTIONS:
+        for section_id, label in self._visible_sections:
             if query in label.casefold() or (query in {"ai", "api", "key", "模型", "密钥"} and section_id == "ai"):
                 self.navigate(section_id)
                 return

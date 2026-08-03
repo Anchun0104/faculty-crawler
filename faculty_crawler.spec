@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 project_root = Path(SPECPATH).resolve()
@@ -24,7 +24,7 @@ datas = [
     (str(browser_source), "ms-playwright"),
     (str(project_root / "desktop_ui" / "theme.qss"), "desktop_ui"),
     (str(project_root / "使用说明.txt"), "."),
-]
+] + collect_data_files("playwright", includes=["driver/**"])
 
 a = Analysis(
     [str(project_root / "desktop_app.py")],

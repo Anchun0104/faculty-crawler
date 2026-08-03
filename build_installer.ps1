@@ -132,6 +132,12 @@ try {
         throw "Unable to install requirements-build.txt."
     }
 
+    & $PythonExecutable -m pip --python $BuildPython install `
+        --disable-pip-version-check --force-reinstall --no-deps playwright
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to install a complete Playwright driver package."
+    }
+
     $env:ARGOS_PACKAGES_DIR = $TranslationModelsRoot
     & $BuildPython "tools\install_translation_models.py"
     if ($LASTEXITCODE -ne 0) {
@@ -148,6 +154,11 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to install task-specific Playwright Chromium."
         }
+    }
+
+    & $BuildPython -c "from playwright.sync_api import sync_playwright; p = sync_playwright(); p.__enter__(); p.__exit__(None, None, None)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Playwright driver self-check failed."
     }
 
     & $BuildPython -m PyInstaller --noconfirm --clean `

@@ -235,7 +235,10 @@ class MainWindow(QMainWindow):
             page.complete_requested.connect(lambda review_id: self._submit_verification_finish(review_id))
         elif page_id == "sessions":
             page.clear_requested.connect(lambda hostname: self._submit(lambda: self.facade.clear_session(hostname)))
-        elif page_id in {"tasks", "runs"}:
+        elif page_id == "tasks":
+            page.new_crawl_requested.connect(self._open_new_crawl)
+            page.export_requested.connect(self._export_task)
+        elif page_id == "runs":
             page.export_requested.connect(self._export_task)
 
     def _open_new_crawl(self) -> None:

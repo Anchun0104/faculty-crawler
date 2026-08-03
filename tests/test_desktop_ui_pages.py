@@ -57,6 +57,28 @@ class DesktopPageTests(unittest.TestCase):
         self.assertEqual(overview.task_count.text(), "1")
         self.assertEqual(runs.table.rowCount(), 1)
 
+    def test_work_pages_use_chinese_headers_and_approved_composition(self):
+        from desktop_ui.pages.overview import OverviewPage
+        from desktop_ui.pages.tasks import TasksPage
+        from desktop_ui.pages.verification import VerificationPage
+
+        overview = OverviewPage(FakeFacade())
+        tasks = TasksPage(FakeFacade())
+        verification = VerificationPage(FakeFacade())
+
+        self.assertEqual(overview.page_header.title.text(), "概览")
+        self.assertEqual(overview.quick_start_card.objectName(), "quickStartCard")
+        self.assertEqual(overview.current_run_card.objectName(), "currentRunCard")
+        self.assertEqual(overview.attention_section.objectName(), "attentionSection")
+        self.assertEqual(tasks.page_header.title.text(), "任务")
+        self.assertEqual(tasks.search.accessibleName(), "搜索任务或站点")
+        self.assertEqual(tasks.status_filter.itemText(0), "全部")
+        self.assertEqual(tasks.inspector.width(), 360)
+        self.assertEqual(verification.page_header.title.text(), "人工验证")
+        self.assertEqual(verification.mock_browser.objectName(), "mockBrowserCard")
+        self.assertIn("1. 打开可见浏览器", verification.instructions_label.text())
+        self.assertIn("不会自动破解 CAPTCHA", verification.info_bar.text())
+
     def test_storage_refresh_renders_safe_summary(self):
         from desktop_ui.pages.storage import StoragePage
         page = StoragePage(FakeFacade())
@@ -82,7 +104,7 @@ class DesktopPageTests(unittest.TestCase):
         page = VerificationPage(FakeFacade())
         page.select_review("1")
         self.assertIn("https://cs.stanford.edu", page.selected_site_label.text())
-        self.assertIn("Visible browser", page.browser_status_label.text())
+        self.assertIn("可见浏览器", page.browser_status_label.text())
         self.assertIn("1.", page.instructions_label.text())
 
     def test_refresh_clears_stale_session_and_verification_selections(self):
@@ -102,7 +124,7 @@ class DesktopPageTests(unittest.TestCase):
     def test_task_filter_offers_policy_confirmation_status(self):
         from desktop_ui.pages.tasks import TasksPage
         page = TasksPage(FakeFacade())
-        self.assertGreaterEqual(page.status_filter.findText("needs_policy_confirmation"), 0)
+        self.assertGreaterEqual(page.status_filter.findText("待确认口径"), 0)
 
     def test_settings_shows_only_implemented_categories(self):
         from desktop_ui.pages.settings import SettingsPage

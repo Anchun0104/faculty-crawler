@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -106,6 +107,12 @@ class DesktopUiShellTests(unittest.TestCase):
 
         self.assertEqual(self.window.current_page_id(), "runs")
         self.assertTrue(self.window.navigation_button("runs").isChecked())
+
+    def test_tasks_primary_button_opens_new_crawl_dialog(self) -> None:
+        self.window.navigate("tasks")
+        with patch.object(self.window, "_open_new_crawl") as open_new_crawl:
+            self.window.tasks_page.page_header.primary_button.click()
+        open_new_crawl.assert_called_once_with()
 
     def test_ctrl_comma_opens_settings(self) -> None:
         QTest.keyClick(self.window, Qt.Key_Comma, Qt.ControlModifier)

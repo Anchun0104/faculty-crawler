@@ -159,6 +159,16 @@ class NewCrawlDialogTests(unittest.TestCase):
         self.assertFalse(self.dialog.start_button.isEnabled())
         self.assertEqual(self.dialog.validation_label.text(), "学校名称仅可用于单个 URL")
 
+    def test_direct_start_does_not_bypass_multi_url_school_override_validation(self) -> None:
+        """A programmatic start must enforce the same override rule as the disabled UI."""
+        self.dialog.school_name_edit.setText("One University")
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty\nhttps://two.edu/faculty")
+        QTest.qWait(160)
+
+        self.dialog._start()
+
+        self.assertEqual(self.facade.created_direct, [])
+
     def test_url_validation_is_debounced_after_editing(self) -> None:
         """Calling the facade on every keystroke would make a large paste unnecessarily expensive."""
         initial_calls = self.facade.prepare_url_calls

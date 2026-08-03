@@ -286,13 +286,19 @@ class NewCrawlDialog(QDialog):
         self.summary_label.setText(" · ".join(parts))
         invalid_lines = [str(line) for line, _value in self._prepared_urls.invalid_lines]
         errors = [f"第 {'、'.join(invalid_lines)} 行 URL 无效"] if invalid_lines else []
-        if valid_count > 1 and self.school_name_edit.text().strip():
+        if self._school_override_is_invalid():
             errors.append("学校名称仅可用于单个 URL")
         self.validation_label.setText("\n".join(errors))
         self._set_duplicate_details(self._prepared_urls.duplicate_lines)
         self._set_batch_confirmation(valid_count)
         self.start_button.setText(f"开始批次（{valid_count} 所学校）")
-        self.start_button.setEnabled(self._prepared_urls.can_start and not errors)
+        self.start_button.setEnabled(self._url_can_start())
+
+    def _school_override_is_invalid(self) -> bool:
+        return len(self._prepared_urls.valid_urls) > 1 and bool(self.school_name_edit.text().strip())
+
+    def _url_can_start(self) -> bool:
+        return self._prepared_urls.can_start and not self._school_override_is_invalid()
 
     def _schedule_url_validation(self) -> None:
         if self._mode == "urls":
@@ -365,7 +371,7 @@ class NewCrawlDialog(QDialog):
         if self._mode == "urls":
             self._url_validation_timer.stop()
             self._refresh_url_validation()
-            if not self._prepared_urls.can_start:
+            if not self._url_can_start():
                 return
             request = self._request()
             self.facade.create_direct_tasks(request)

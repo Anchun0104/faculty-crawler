@@ -32,6 +32,7 @@ class StatusBadge(QWidget):
         self._dot.setAccessibleName("Status indicator")
         self._label = QLabel(self)
         self._label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._compact = False
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 6)
         layout.setSpacing(8)
@@ -45,8 +46,10 @@ class StatusBadge(QWidget):
         text, color = _PRESENTATION[status]
         self._status = status
         self._label.setText(text)
+        self._dot.setAccessibleName(f"Status indicator: {text}")
         self._dot.setStyleSheet(f"background-color: {color}; border-radius: 4px;")
-        self.setToolTip(text)
+        self.setAccessibleName(f"Background status: {text}")
+        self.setToolTip(f"Background status: {text}")
 
     @property
     def status(self) -> BackgroundStatus:
@@ -54,3 +57,20 @@ class StatusBadge(QWidget):
 
     def status_text(self) -> str:
         return self._label.text()
+
+    def set_compact(self, compact: bool) -> None:
+        """Show a dot-only visual in the collapsed navigation without hiding state from AT."""
+        self._compact = bool(compact)
+        self._label.setVisible(not self._compact)
+        if self._compact:
+            self.setFixedWidth(32)
+        else:
+            self.setMinimumWidth(0)
+            self.setMaximumWidth(16777215)
+
+    def is_compact(self) -> bool:
+        return self._compact
+
+    def visible_text_label(self) -> QLabel:
+        """Expose the rendered text label for focused widget-level tests."""
+        return self._label

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup,
@@ -27,6 +27,7 @@ class MainWindow(QMainWindow):
     """Native Qt main window with grouped, keyboard-accessible navigation."""
 
     _PAGE_IDS = tuple(item.page_id for item in NAVIGATION_ITEMS)
+    _NAVIGATION_COLLAPSE_BREAKPOINT = 1280
     _GROUPS = (
         ("Work", ("overview", "tasks", "verification")),
         ("Records", ("runs", "sessions")),
@@ -39,6 +40,7 @@ class MainWindow(QMainWindow):
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
+        self._group_labels: list[QLabel] = []
         self._build_shell()
         self._settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         self._settings_shortcut.setContext(Qt.WindowShortcut)
@@ -88,6 +90,7 @@ class MainWindow(QMainWindow):
         for group_label, page_ids in self._GROUPS:
             label = QLabel(group_label, self._navigation)
             label.setObjectName("navigationGroup")
+            self._group_labels.append(label)
             layout.addWidget(label)
             for page_id in page_ids:
                 item = items[page_id]
@@ -160,6 +163,11 @@ class MainWindow(QMainWindow):
         width = LIGHT_TOKENS.nav_collapsed if self._nav_collapsed else LIGHT_TOKENS.nav_expanded
         self._navigation.setFixedWidth(width)
         self._nav_title.setVisible(not self._nav_collapsed)
+        for label in self._group_labels:
+            label.setVisible(not self._nav_collapsed)
+        self.background_status.set_compact(self._nav_collapsed)
+        with QSignalBlocker(self.navigation_toggle):
+            self.navigation_toggle.setChecked(self._nav_collapsed)
         self.navigation_toggle.setText("☰" if not self._nav_collapsed else "›")
         self.navigation_toggle.setAccessibleName(
             "Expand navigation" if self._nav_collapsed else "Collapse navigation"
@@ -175,8 +183,20 @@ class MainWindow(QMainWindow):
     def navigation_width(self) -> int:
         return self._navigation.width()
 
+    @classmethod
+    def navigation_breakpoint(cls) -> int:
+        """Return the supported-width breakpoint for automatic nav collapse."""
+        return cls._NAVIGATION_COLLAPSE_BREAKPOINT
+
+    def navigation_group_labels(self) -> tuple[QLabel, ...]:
+        return tuple(self._group_labels)
+
     def set_background_status(self, status: BackgroundStatus) -> None:
         self.background_status.set_status(status)
 
     def background_status_text(self) -> str:
         return self.background_status.status_text()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override name
+        super().resizeEvent(event)
+        self.set_navigation_collapsed(self.width() < self.navigation_breakpoint())

@@ -53,10 +53,33 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertEqual(self.window.navigation_width(), 220)
         self.assertFalse(self.window.is_navigation_collapsed())
 
+    def test_resize_below_breakpoint_collapses_navigation(self) -> None:
+        self.window.resize(self.window.navigation_breakpoint() - 1, 720)
+        QTest.qWait(10)
+
+        self.assertTrue(self.window.is_navigation_collapsed())
+        self.assertEqual(self.window.navigation_width(), 56)
+
+    def test_resize_at_breakpoint_expands_navigation(self) -> None:
+        self.window.set_navigation_collapsed(True)
+        self.window.resize(self.window.navigation_breakpoint(), 720)
+        QTest.qWait(10)
+
+        self.assertFalse(self.window.is_navigation_collapsed())
+        self.assertEqual(self.window.navigation_width(), 220)
+
     def test_background_status_is_rendered_in_the_shell(self) -> None:
         self.window.set_background_status(BackgroundStatus.WAITING_FOR_VERIFICATION)
 
         self.assertIn("Waiting for verification", self.window.background_status_text())
+
+    def test_collapsed_navigation_hides_group_labels_and_compacts_status(self) -> None:
+        self.window.set_navigation_collapsed(True)
+
+        self.assertTrue(all(label.isHidden() for label in self.window.navigation_group_labels()))
+        self.assertTrue(self.window.background_status.is_compact())
+        self.assertFalse(self.window.background_status.visible_text_label().isVisible())
+        self.assertIn("Idle", self.window.background_status.toolTip())
 
 
 if __name__ == "__main__":

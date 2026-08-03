@@ -6,6 +6,7 @@ QWidget {
 }
 
 QPushButton:focus,
+QToolButton:focus,
 QLineEdit:focus,
 QTextEdit:focus,
 QComboBox:focus {

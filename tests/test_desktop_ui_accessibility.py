@@ -10,6 +10,8 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop_ui.main_window import MainWindow
+from desktop_ui.tokens import load_theme_qss
+from desktop_ui.widgets.status_badge import BackgroundStatus
 
 
 APP = QApplication.instance() or QApplication([])
@@ -27,7 +29,7 @@ class DesktopUiAccessibilityTests(unittest.TestCase):
 
     def test_navigation_controls_have_accessible_names_and_tooltips(self) -> None:
         toggle = self.window.navigation_toggle
-        self.assertEqual(toggle.accessibleName(), "Collapse navigation")
+        self.assertEqual(toggle.accessibleName(), "Expand navigation")
         self.assertTrue(toggle.toolTip())
         for page_id in self.window.page_ids():
             button = self.window.navigation_button(page_id)
@@ -36,13 +38,19 @@ class DesktopUiAccessibilityTests(unittest.TestCase):
 
     def test_page_stack_and_background_status_are_named_for_assistive_technology(self) -> None:
         self.assertEqual(self.window.page_stack.accessibleName(), "Main content")
-        self.assertEqual(self.window.background_status.accessibleName(), "Background status")
+        self.assertEqual(self.window.background_status.accessibleName(), "Background status: Idle")
+        self.window.set_background_status(BackgroundStatus.RUNNING)
+        self.assertEqual(self.window.background_status.accessibleName(), "Background status: Running")
 
     def test_focus_order_starts_with_navigation_toggle(self) -> None:
         self.window.navigation_toggle.setFocus()
         QTest.keyClick(self.window.navigation_toggle, Qt.Key_Tab)
 
         self.assertTrue(any(button.hasFocus() for button in self.window.navigation_buttons()))
+
+    def test_tool_buttons_have_a_visible_focus_style_contract(self) -> None:
+        self.assertIn("QToolButton:focus", load_theme_qss())
+        self.assertIn("border: 2px solid #1769AA", load_theme_qss())
 
 
 if __name__ == "__main__":

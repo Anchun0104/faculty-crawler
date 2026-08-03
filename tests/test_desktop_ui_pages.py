@@ -132,12 +132,32 @@ class DesktopPageTests(unittest.TestCase):
         page = SettingsPage(FakeFacade())
 
         self.assertEqual(tuple(page._section_buttons), ("ai", "storage"))
+        self.assertEqual(page.page_header.title.text(), "设置")
+        self.assertEqual(
+            tuple(button.text() for button in page._section_buttons.values()),
+            ("翻译与 AI", "存储与诊断"),
+        )
+        self.assertEqual(page.search_edit.accessibleName(), "搜索设置")
+
+    def test_ai_and_storage_pages_keep_technical_names_but_localize_controls(self):
+        from desktop_ui.pages.ai_settings import AiSettingsPage
+        from desktop_ui.pages.storage import StoragePage
+
+        ai_page = AiSettingsPage(FakeFacade())
+        storage_page = StoragePage(FakeFacade())
+
+        self.assertEqual(ai_page.accessibleName(), "翻译与 AI 设置")
+        self.assertEqual(ai_page.enabled_checkbox.text(), "启用外部 AI 辅助")
+        self.assertEqual(ai_page.test_connection_button.text(), "测试连接")
+        self.assertEqual(storage_page.section_title.text(), "存储与诊断")
+        self.assertEqual(storage_page.export_button.text(), "导出诊断包")
+        self.assertEqual(storage_page.clear_temp_button.text(), "清理临时数据")
 
     def test_internal_clear_copy_preserves_task_history_and_database(self):
         from desktop_ui.pages.storage import StoragePage
 
         page = StoragePage(FakeFacade())
-        self.assertIn("workflow database", page.clear_internal_button.toolTip())
+        self.assertIn("工作流数据库", page.clear_internal_button.toolTip())
 
     def test_internal_clear_confirmation_states_diagnostic_zips_are_preserved(self):
         from desktop_ui.pages.storage import StoragePage
@@ -151,8 +171,8 @@ class DesktopPageTests(unittest.TestCase):
         finally:
             QMessageBox.question = original
 
-        self.assertIn("Diagnostic ZIPs", captured[0])
-        self.assertIn("workflow database", captured[0])
+        self.assertIn("诊断 ZIP", captured[0])
+        self.assertIn("工作流数据库", captured[0])
 
     def test_task_export_emits_the_selected_completed_batch(self):
         from desktop_ui.pages.tasks import TasksPage

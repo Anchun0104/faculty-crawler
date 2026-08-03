@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from desktop_ui.widgets.page_header import PageHeader
+
 from .ai_settings import AiSettingsPage
 from .storage import StoragePage
 
@@ -34,16 +36,26 @@ class SettingsPage(QWidget):
     def __init__(self, facade: object, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.facade = facade
-        self._visible_sections = (("ai", "AI settings"), ("storage", "Storage and diagnostics"))
+        self._visible_sections = (("ai", "翻译与 AI"), ("storage", "存储与诊断"))
         self._section_indexes: dict[str, int] = {}
         self._section_buttons: dict[str, QToolButton] = {}
         self._build()
         self.navigate("ai")
 
     def _build(self) -> None:
-        layout = QHBoxLayout(self)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(20)
+        layout.setSpacing(12)
+
+        self.page_header = PageHeader(
+            "设置",
+            "搜索和管理 Faculty Crawler 的本地行为。",
+            parent=self,
+        )
+        layout.addWidget(self.page_header)
+
+        body = QHBoxLayout()
+        body.setSpacing(20)
 
         nav = QFrame(self)
         nav.setObjectName("settingsNavigation")
@@ -51,7 +63,7 @@ class SettingsPage(QWidget):
         nav_layout = QVBoxLayout(nav)
         nav_layout.setContentsMargins(0, 0, 0, 0)
         nav_layout.setSpacing(4)
-        nav_label = QLabel("设置", nav)
+        nav_label = QLabel("设置分类", nav)
         nav_label.setObjectName("sectionHeading")
         nav_layout.addWidget(nav_label)
         self._buttons = QButtonGroup(self)
@@ -59,15 +71,16 @@ class SettingsPage(QWidget):
         for section_id, label in self._visible_sections:
             button = QToolButton(nav)
             button.setText(label)
+            button.setObjectName("settingsNavButton")
             button.setCheckable(True)
             button.setToolButtonStyle(Qt.ToolButtonTextOnly)
-            button.setAccessibleName(f"Open {label} settings")
+            button.setAccessibleName(f"打开{label}设置")
             button.clicked.connect(lambda checked=False, target=section_id: self.navigate(target))
             self._buttons.addButton(button)
             self._section_buttons[section_id] = button
             nav_layout.addWidget(button)
         nav_layout.addStretch(1)
-        layout.addWidget(nav)
+        body.addWidget(nav)
 
         content = QWidget(self)
         content_layout = QVBoxLayout(content)
@@ -75,7 +88,7 @@ class SettingsPage(QWidget):
         content_layout.setSpacing(16)
         self.search_edit = QLineEdit(content)
         self.search_edit.setPlaceholderText("搜索设置")
-        self.search_edit.setAccessibleName("Search settings")
+        self.search_edit.setAccessibleName("搜索设置")
         self.search_edit.textChanged.connect(self._search_sections)
         content_layout.addWidget(self.search_edit)
         self.section_stack = QStackedWidget(content)
@@ -84,7 +97,7 @@ class SettingsPage(QWidget):
                 self.ai_page = AiSettingsPage(self.facade, self.section_stack)
                 self.ai_scroll = QScrollArea(self.section_stack)
                 self.ai_scroll.setObjectName("aiSettingsScrollArea")
-                self.ai_scroll.setAccessibleName("Scrollable AI settings")
+                self.ai_scroll.setAccessibleName("可滚动的翻译与 AI 设置")
                 self.ai_scroll.setWidgetResizable(True)
                 self.ai_scroll.setFrameShape(QFrame.NoFrame)
                 self.ai_scroll.setWidget(self.ai_page)
@@ -96,7 +109,8 @@ class SettingsPage(QWidget):
                 page = self._placeholder_page(label)
             self._section_indexes[section_id] = self.section_stack.addWidget(page)
         content_layout.addWidget(self.section_stack, 1)
-        layout.addWidget(content, 1)
+        body.addWidget(content, 1)
+        layout.addLayout(body, 1)
 
     @staticmethod
     def _placeholder_page(label: str) -> QWidget:

@@ -75,7 +75,9 @@ QFrame#choiceCard,
 QFrame#currentRunCard,
 QFrame#quickStartCard,
 QFrame#runBatchList,
-QFrame#runDetailPanel {
+QFrame#runDetailPanel,
+QFrame#storageUsageCard,
+QFrame#storageRetentionCard {
     background: @SURFACE_PRIMARY@;
     border: 1px solid @BORDER_DEFAULT@;
     border-radius: 12px;
@@ -156,3 +158,16 @@ QScrollBar::handle:horizontal { background: #C5D0DB; border-radius: 5px; min-wid
 #timelineEvent { border-bottom: 1px solid @BORDER_SUBTLE@; }
 #timelineDot { color: @PRIMARY@; font-size: 11px; }
 #timelineTime { color: @TEXT_SECONDARY@; font-size: 12px; }
+#settingsNavButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: @TEXT_SECONDARY@;
+    min-height: 34px;
+    padding: 0 10px;
+    text-align: left;
+}
+#settingsNavButton:hover { background: @SURFACE_HOVER@; color: @TEXT_PRIMARY@; }
+#settingsNavButton:checked { background: @PRIMARY_SOFT@; border-color: #C8DFF2; color: @PRIMARY@; font-weight: 600; }
+#storageUsageBar { min-height: 10px; max-height: 10px; border: 0; border-radius: 5px; background: #E9EDF2; }
+#storageUsageBar::chunk { background: @PRIMARY@; border-radius: 5px; }

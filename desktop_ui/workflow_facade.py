@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from crawler.app_paths import AppPaths
 from faculty_workflow.ai_settings import AiSettingsStore, ProviderConfiguration
 from faculty_workflow.database import WorkflowDatabase
-from faculty_workflow.models import normalize_url
+from faculty_workflow.importers import load_schools
+from faculty_workflow.models import SchoolInput, normalize_url
 
 from .models import AiSettingsView, AiUsageView, NewCrawlRequest, SaveAiSettings, UrlPreparation
 
@@ -61,6 +63,26 @@ class WorkflowFacade:
             routine_model=request.routine_model,
             escalation_model=request.escalation_model,
             budget_usd=request.budget_usd,
+        )
+
+    def prepare_schools_file(self, path: str | Path) -> tuple[SchoolInput, ...]:
+        """Validate an XLSX source with the workflow's established importer."""
+        source = Path(path)
+        if source.suffix.casefold() != ".xlsx":
+            raise ValueError("请选择 XLSX 文件")
+        return tuple(load_schools(source))
+
+    def create_xlsx_task(self, path: str | Path, request: NewCrawlRequest) -> str:
+        """Create a workflow task from a source already validated by the importer."""
+        schools = self.prepare_schools_file(path)
+        return self.service.create_task_from_schools(
+            schools=schools,
+            discipline=request.discipline,
+            output_dir=request.output_dir,
+            budget_usd=request.budget_usd,
+            generate_ai_policy=request.use_ai,
+            routine_model=request.routine_model,
+            escalation_model=request.escalation_model,
         )
 
     def ai_settings(self) -> AiSettingsView:

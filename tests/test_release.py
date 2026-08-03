@@ -15,7 +15,35 @@ from build_release import RELEASE_FILES, build_archive
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _archive_subprocess_pythonpath(
+    extracted: Path,
+    inherited: str,
+    source_cwd: Path,
+) -> str:
+    """Keep inherited dependency paths valid after the archive test changes CWD."""
+    entries = [str(extracted)]
+    for entry in filter(None, inherited.split(os.pathsep)):
+        path = Path(entry)
+        entries.append(str(path if path.is_absolute() else (source_cwd / path).resolve()))
+    return os.pathsep.join(entries)
+
+
 class ReleasePackageTests(unittest.TestCase):
+    def test_archive_subprocess_normalizes_relative_pythonpath_entries(self) -> None:
+        source_cwd = PROJECT_ROOT
+        inherited = os.pathsep.join((".runtime-packages", "relative-tools"))
+
+        pythonpath = _archive_subprocess_pythonpath(
+            Path("C:/archive/faculty-crawler-windows"),
+            inherited,
+            source_cwd,
+        )
+
+        entries = pythonpath.split(os.pathsep)
+        self.assertEqual(entries[0], "C:\\archive\\faculty-crawler-windows")
+        self.assertEqual(entries[1], str((source_cwd / ".runtime-packages").resolve()))
+        self.assertEqual(entries[2], str((source_cwd / "relative-tools").resolve()))
+
     def test_release_uses_single_version_source(self) -> None:
         version_path = PROJECT_ROOT / "VERSION"
         build_text = (PROJECT_ROOT / "build_installer.ps1").read_text(
@@ -300,8 +328,10 @@ class ReleasePackageTests(unittest.TestCase):
             extracted = root / "extract" / "faculty-crawler-windows"
             environment = os.environ.copy()
             environment["PYTHONDONTWRITEBYTECODE"] = "1"
-            environment["PYTHONPATH"] = os.pathsep.join(
-                filter(None, (str(extracted), environment.get("PYTHONPATH", "")))
+            environment["PYTHONPATH"] = _archive_subprocess_pythonpath(
+                extracted,
+                environment.get("PYTHONPATH", ""),
+                Path.cwd(),
             )
             result = subprocess.run(
                 [sys.executable, "-c", "import desktop_app"],

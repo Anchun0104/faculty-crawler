@@ -76,10 +76,22 @@ class DesktopUiShellTests(unittest.TestCase):
 
     def test_shell_has_six_primary_destinations(self) -> None:
         self.assertEqual(self.window.minimumSize().width(), 1180)
+        self.assertEqual(self.window.windowTitle(), "教师目录采集器")
         self.assertEqual(
             self.window.page_ids(),
             ("overview", "tasks", "verification", "runs", "sessions", "settings"),
         )
+
+    def test_shell_uses_chinese_group_and_navigation_copy(self) -> None:
+        self.assertEqual(
+            tuple(label.text() for label in self.window.navigation_group_labels()),
+            ("工作", "记录", "系统"),
+        )
+        self.assertEqual(
+            tuple(button.text() for button in self.window.navigation_buttons()),
+            ("概览", "任务", "人工验证", "运行历史", "站点会话", "设置"),
+        )
+        self.assertEqual(self.window.background_status_text(), "空闲")
 
     def test_shell_can_construct_with_a_bare_facade(self) -> None:
         """Shell/accessibility consumers need not implement settings operations."""
@@ -164,7 +176,7 @@ class DesktopUiShellTests(unittest.TestCase):
     def test_background_status_is_rendered_in_the_shell(self) -> None:
         self.window.set_background_status(BackgroundStatus.WAITING_FOR_VERIFICATION)
 
-        self.assertIn("Waiting for verification", self.window.background_status_text())
+        self.assertEqual(self.window.background_status_text(), "等待人工验证")
 
     def test_collapsed_navigation_hides_group_labels_and_compacts_status(self) -> None:
         self.window.set_navigation_collapsed(True)
@@ -172,7 +184,7 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertTrue(all(label.isHidden() for label in self.window.navigation_group_labels()))
         self.assertTrue(self.window.background_status.is_compact())
         self.assertFalse(self.window.background_status.visible_text_label().isVisible())
-        self.assertIn("Idle", self.window.background_status.toolTip())
+        self.assertIn("空闲", self.window.background_status.toolTip())
 
     def test_request_close_with_active_work_can_minimize_to_tray(self) -> None:
         release = threading.Event()
@@ -202,19 +214,19 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertTrue(
             self._wait_until(
                 lambda: self.facade.run_progress == ["task-1"]
-                and "completed" in self.window.operation_info.message().casefold()
+                and "已完成" in self.window.operation_info.message()
             )
         )
         self.assertEqual(self.facade.created, [request])
-        self.assertIn("completed", self.window.operation_info.message().casefold())
+        self.assertIn("已完成", self.window.operation_info.message())
 
     def test_failed_verification_start_rolls_back_waiting_state_and_uses_safe_message(self) -> None:
         self.facade.begin_verification = lambda _review_id: (_ for _ in ()).throw(RuntimeError("token=secret"))
         self.window._submit_verification_start("7")
 
-        self.assertTrue(self._wait_until(lambda: "failed" in self.window.operation_info.message().casefold()))
+        self.assertTrue(self._wait_until(lambda: "失败" in self.window.operation_info.message()))
         self.assertNotIn("secret", self.window.operation_info.message())
-        self.assertIn("Idle", self.window.background_status_text())
+        self.assertIn("空闲", self.window.background_status_text())
 
     def test_minimize_choice_does_not_hide_without_a_system_tray(self) -> None:
         original = self.window.tray_available

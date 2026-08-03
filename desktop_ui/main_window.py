@@ -42,9 +42,9 @@ class MainWindow(QMainWindow):
     _PAGE_IDS = tuple(item.page_id for item in NAVIGATION_ITEMS)
     _NAVIGATION_COLLAPSE_BREAKPOINT = 1280
     _GROUPS = (
-        ("Work", ("overview", "tasks", "verification")),
-        ("Records", ("runs", "sessions")),
-        ("System", ("settings",)),
+        ("工作", ("overview", "tasks", "verification")),
+        ("记录", ("runs", "sessions")),
+        ("系统", ("settings",)),
     )
 
     def __init__(self, facade: object, parent: QWidget | None = None, *, worker_pool: WorkerPool | None = None) -> None:
@@ -80,12 +80,12 @@ class MainWindow(QMainWindow):
         self.navigate("overview")
 
     def _build_shell(self) -> None:
-        self.setWindowTitle("Faculty Crawler")
+        self.setWindowTitle("教师目录采集器")
         self.setMinimumSize(1180, 720)
 
         root = QWidget(self)
         root.setObjectName("appShell")
-        root.setAccessibleName("Faculty Crawler application")
+        root.setAccessibleName("教师目录采集器应用")
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -96,12 +96,12 @@ class MainWindow(QMainWindow):
 
     def _build_tray(self) -> None:
         self.tray_icon = QSystemTrayIcon(self.windowIcon(), self)
-        self.tray_icon.setToolTip("Faculty Crawler")
+        self.tray_icon.setToolTip("教师目录采集器")
         menu = QMenu(self)
-        restore = QAction("Restore Faculty Crawler", menu)
+        restore = QAction("恢复教师目录采集器", menu)
         restore.triggered.connect(self.restore_from_tray)
         menu.addAction(restore)
-        exit_action = QAction("Exit after current task", menu)
+        exit_action = QAction("当前任务完成后退出", menu)
         exit_action.triggered.connect(self.exit_after_current)
         menu.addAction(exit_action)
         self.tray_icon.setContextMenu(menu)
@@ -117,22 +117,22 @@ class MainWindow(QMainWindow):
     def _build_navigation(self) -> QFrame:
         self._navigation = QFrame(self)
         self._navigation.setObjectName("primaryNavigation")
-        self._navigation.setAccessibleName("Primary navigation")
+        self._navigation.setAccessibleName("主导航")
         self._navigation.setFixedWidth(LIGHT_TOKENS.nav_expanded)
         layout = QVBoxLayout(self._navigation)
         layout.setContentsMargins(8, 12, 8, 12)
         layout.setSpacing(4)
 
         header = QHBoxLayout()
-        self._nav_title = QLabel("Faculty Crawler", self._navigation)
+        self._nav_title = QLabel("教师目录采集器", self._navigation)
         self._nav_title.setObjectName("navigationProductName")
-        self._nav_title.setAccessibleName("Faculty Crawler")
+        self._nav_title.setAccessibleName("教师目录采集器")
         header.addWidget(self._nav_title, 1)
         self.navigation_toggle = QToolButton(self._navigation)
         self.navigation_toggle.setText("☰")
         self.navigation_toggle.setCheckable(True)
-        self.navigation_toggle.setAccessibleName("Collapse navigation")
-        self.navigation_toggle.setToolTip("Collapse navigation")
+        self.navigation_toggle.setAccessibleName("折叠导航")
+        self.navigation_toggle.setToolTip("折叠导航")
         self.navigation_toggle.toggled.connect(self.set_navigation_collapsed)
         header.addWidget(self.navigation_toggle)
         layout.addLayout(header)
@@ -153,7 +153,7 @@ class MainWindow(QMainWindow):
                 button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
                 button.setIcon(navigation_icon(page_id))
                 button.setText(item.label)
-                button.setAccessibleName(f"Navigate to {item.label}")
+                button.setAccessibleName(f"导航到{item.label}")
                 button.setToolTip(item.label)
                 button.clicked.connect(lambda checked=False, target=page_id: self.navigate(target))
                 self._button_group.addButton(button)
@@ -170,19 +170,19 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 16, 24, 24)
         layout.setSpacing(16)
-        title = QLabel("Faculty Crawler", content)
+        title = QLabel("教师目录采集器", content)
         title.setObjectName("shellTitle")
         title.setAccessibleName("Application title")
         layout.addWidget(title)
-        self.operation_info = InfoBar("Ready for background work.", content)
-        self.operation_info.setAccessibleName("Background operation notification")
+        self.operation_info = InfoBar("后台服务正常，可以开始工作。", content)
+        self.operation_info.setAccessibleName("后台操作通知")
         layout.addWidget(self.operation_info)
         self.page_stack = QStackedWidget(content)
         self.page_stack.setAccessibleName("Main content")
         for item in NAVIGATION_ITEMS:
             page = self._build_page(item.page_id, item.label)
             page.setObjectName(f"page_{item.page_id}")
-            page.setAccessibleName(f"{item.label} page")
+            page.setAccessibleName(f"{item.label}页面")
             self._page_index[item.page_id] = self.page_stack.addWidget(page)
         layout.addWidget(self.page_stack, 1)
         return content
@@ -296,26 +296,26 @@ class MainWindow(QMainWindow):
         self._update_background_status(self.worker_pool.has_active_work())
 
     def _worker_progress(self, _progress: object) -> None:
-        self.operation_info.set_message("Background operation running.")
+        self.operation_info.set_message("后台操作正在运行。")
 
     def _worker_succeeded(self, _result: object) -> None:
         if self._verification_start_pending:
             self._waiting_for_verification = True
             self._verification_start_pending = False
         if isinstance(_result, Path):
-            self.operation_info.set_message(f"Background operation completed. Output: {_result}")
+            self.operation_info.set_message(f"后台操作已完成。输出：{_result}")
         elif isinstance(_result, dict) and _result and all(isinstance(value, Path) for value in _result.values()):
             locations = ", ".join(str(value) for value in _result.values())
-            self.operation_info.set_message(f"Background operation completed. Output: {locations}")
+            self.operation_info.set_message(f"后台操作已完成。输出：{locations}")
         else:
-            self.operation_info.set_message("Background operation completed.")
+            self.operation_info.set_message("后台操作已完成。")
         self._refresh_after_command()
 
     def _worker_failed(self, _message: str) -> None:
         if self._verification_start_pending:
             self._waiting_for_verification = False
             self._verification_start_pending = False
-        self.operation_info.set_message("Background operation failed. Check sanitized diagnostics for details.")
+        self.operation_info.set_message("后台操作失败。请查看脱敏诊断了解详情。")
         self._refresh_after_command()
 
     def _refresh_after_command(self) -> None:
@@ -389,9 +389,7 @@ class MainWindow(QMainWindow):
         with QSignalBlocker(self.navigation_toggle):
             self.navigation_toggle.setChecked(self._nav_collapsed)
         self.navigation_toggle.setText("☰" if not self._nav_collapsed else "›")
-        self.navigation_toggle.setAccessibleName(
-            "Expand navigation" if self._nav_collapsed else "Collapse navigation"
-        )
+        self.navigation_toggle.setAccessibleName("展开导航" if self._nav_collapsed else "折叠导航")
         self.navigation_toggle.setToolTip(self.navigation_toggle.accessibleName())
         style = Qt.ToolButtonIconOnly if self._nav_collapsed else Qt.ToolButtonTextBesideIcon
         for button in self._navigation_buttons.values():
@@ -433,10 +431,10 @@ class MainWindow(QMainWindow):
 
     def _ask_close_choice(self) -> str:
         dialog = QMessageBox(self)
-        dialog.setWindowTitle("Background work is active")
-        dialog.setText("A crawl is still running. Choose how to continue.")
-        minimize = dialog.addButton("Minimize to tray", QMessageBox.ActionRole)
-        after_current = dialog.addButton("Exit after current task", QMessageBox.AcceptRole)
+        dialog.setWindowTitle("任务正在运行")
+        dialog.setText("采集任务仍在运行，请选择接下来的操作。")
+        minimize = dialog.addButton("最小化到系统托盘", QMessageBox.ActionRole)
+        after_current = dialog.addButton("当前任务完成后退出", QMessageBox.AcceptRole)
         dialog.addButton(QMessageBox.Cancel)
         dialog.exec()
         if dialog.clickedButton() is minimize:
@@ -447,7 +445,7 @@ class MainWindow(QMainWindow):
 
     def minimize_to_tray(self) -> None:
         if not self.tray_available():
-            self.operation_info.set_message("System tray is unavailable; keep this window open while work runs.")
+            self.operation_info.set_message("系统托盘不可用，任务运行期间请保持窗口打开。")
             return
         self.tray_icon.show()
         self.hide()

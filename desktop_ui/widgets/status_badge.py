@@ -15,9 +15,9 @@ class BackgroundStatus(str, Enum):
 
 
 _PRESENTATION = {
-    BackgroundStatus.IDLE: ("Idle", "#667085"),
-    BackgroundStatus.RUNNING: ("Running", "#1769AA"),
-    BackgroundStatus.WAITING_FOR_VERIFICATION: ("Waiting for verification", "#B56A08"),
+    BackgroundStatus.IDLE: ("空闲", "#667085"),
+    BackgroundStatus.RUNNING: ("运行中", "#1769AA"),
+    BackgroundStatus.WAITING_FOR_VERIFICATION: ("等待人工验证", "#B56A08"),
 }
 
 
@@ -26,10 +26,11 @@ class StatusBadge(QWidget):
 
     def __init__(self, status: BackgroundStatus = BackgroundStatus.IDLE, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setAccessibleName("Background status")
+        self.setObjectName("statusBadge")
+        self.setAccessibleName("后台状态")
         self._dot = QLabel(self)
         self._dot.setFixedSize(8, 8)
-        self._dot.setAccessibleName("Status indicator")
+        self._dot.setAccessibleName("状态指示器")
         self._label = QLabel(self)
         self._label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self._compact = False
@@ -46,10 +47,10 @@ class StatusBadge(QWidget):
         text, color = _PRESENTATION[status]
         self._status = status
         self._label.setText(text)
-        self._dot.setAccessibleName(f"Status indicator: {text}")
+        self._dot.setAccessibleName(f"状态指示器：{text}")
         self._dot.setStyleSheet(f"background-color: {color}; border-radius: 4px;")
-        self.setAccessibleName(f"Background status: {text}")
-        self.setToolTip(f"Background status: {text}")
+        self.setAccessibleName(f"后台状态：{text}")
+        self.setToolTip(f"后台状态：{text}")
 
     @property
     def status(self) -> BackgroundStatus:

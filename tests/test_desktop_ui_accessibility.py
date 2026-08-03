@@ -29,18 +29,26 @@ class DesktopUiAccessibilityTests(unittest.TestCase):
 
     def test_navigation_controls_have_accessible_names_and_tooltips(self) -> None:
         toggle = self.window.navigation_toggle
-        self.assertEqual(toggle.accessibleName(), "Expand navigation")
+        self.assertEqual(toggle.accessibleName(), "展开导航")
         self.assertTrue(toggle.toolTip())
+        expected = {
+            "overview": "导航到概览",
+            "tasks": "导航到任务",
+            "verification": "导航到人工验证",
+            "runs": "导航到运行历史",
+            "sessions": "导航到站点会话",
+            "settings": "导航到设置",
+        }
         for page_id in self.window.page_ids():
             button = self.window.navigation_button(page_id)
-            self.assertTrue(button.accessibleName())
+            self.assertEqual(button.accessibleName(), expected[page_id])
             self.assertTrue(button.toolTip())
 
     def test_page_stack_and_background_status_are_named_for_assistive_technology(self) -> None:
         self.assertEqual(self.window.page_stack.accessibleName(), "Main content")
-        self.assertEqual(self.window.background_status.accessibleName(), "Background status: Idle")
+        self.assertEqual(self.window.background_status.accessibleName(), "后台状态：空闲")
         self.window.set_background_status(BackgroundStatus.RUNNING)
-        self.assertEqual(self.window.background_status.accessibleName(), "Background status: Running")
+        self.assertEqual(self.window.background_status.accessibleName(), "后台状态：运行中")
 
     def test_focus_order_starts_with_navigation_toggle(self) -> None:
         self.window.navigation_toggle.setFocus()

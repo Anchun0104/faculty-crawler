@@ -99,6 +99,17 @@ class WorkflowFacade:
         self.ai_settings_store.save(configuration, command.api_key)
         return self._ai_settings_view(configuration)
 
+    def delete_ai_key(self) -> AiSettingsView:
+        """Remove the encrypted key without exposing its plaintext to the UI."""
+        self.ai_settings_store.delete_key()
+        return self.ai_settings()
+
+    def test_ai_connection(self) -> object:
+        """Test the saved configuration internally; the decrypted key never leaves this layer."""
+        configuration = self.ai_settings_store.load_configuration()
+        api_key = self.ai_settings_store.keys.load()
+        return self.ai_settings_store.test_connection(configuration, api_key)
+
     def ai_usage(self) -> AiUsageView:
         """Return the current UTC month's recorded AI usage for the settings UI."""
         now = datetime.now(timezone.utc)
@@ -111,6 +122,27 @@ class WorkflowFacade:
             input_tokens=int(row["input_tokens"]),
             output_tokens=int(row["output_tokens"]),
             estimated_cost_usd=float(row["estimated_cost_usd"]),
+        )
+
+    def ai_usage_details(self, *, limit: int = 200) -> tuple[dict[str, object], ...]:
+        """Return display-safe call metadata for the settings table.
+
+        Provider response IDs and errors are intentionally omitted: they can be
+        sensitive and are not needed for an operator to review usage.
+        """
+        rows = self.database.list_ai_usage(task_id=None, limit=limit)
+        return tuple(
+            {
+                "created_at": str(row["created_at"]),
+                "task_id": str(row["task_id"]),
+                "operation": str(row["operation"]),
+                "model": str(row["model"]),
+                "input_tokens": int(row["input_tokens"]),
+                "output_tokens": int(row["output_tokens"]),
+                "estimated_cost_usd": float(row["estimated_cost_usd"]),
+                "status": str(row["status"]),
+            }
+            for row in rows
         )
 
     def _ai_settings_view(self, configuration: ProviderConfiguration) -> AiSettingsView:

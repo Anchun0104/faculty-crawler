@@ -14,6 +14,7 @@ from faculty_workflow.models import SchoolInput, normalize_url
 
 from .models import AiSettingsView, AiUsageView, NewCrawlRequest, SaveAiSettings, UrlPreparation
 from .privacy import redact_diagnostic
+from crawler.diagnostics import DiagnosticEvent
 
 if TYPE_CHECKING:
     from faculty_workflow.service import WorkflowService
@@ -31,6 +32,15 @@ class WorkflowFacade:
         self.database = database
         self.ai_settings_store = ai_settings_store
         self.app_paths = app_paths
+        self._operation_diagnostics: list[DiagnosticEvent] = []
+
+    def record_operation_failure(self, operation: str, error: Exception) -> None:
+        self._operation_diagnostics.append(
+            DiagnosticEvent(
+                "desktop", "", operation, type(error).__name__,
+                redact_diagnostic(str(error)), {},
+            )
+        )
 
     def prepare_urls(self, raw: str) -> UrlPreparation:
         valid_urls: list[str] = []
@@ -232,11 +242,11 @@ class WorkflowFacade:
 
     def export_diagnostics(self) -> Path:
         from datetime import datetime
-        from crawler.diagnostics import DiagnosticEvent, build_problem_report
+        from crawler.diagnostics import build_problem_report
 
         reports = Path(self.app_paths.reports)
         name = f"desktop-diagnostics-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.zip"
-        events: list[DiagnosticEvent] = []
+        events = list(self._operation_diagnostics)
         for task in self.database.list_tasks(limit=500):
             task_id = str(task["id"])
             for category in ("warning", "error"):

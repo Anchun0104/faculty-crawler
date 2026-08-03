@@ -167,6 +167,18 @@ class WorkflowFacadeTests(unittest.TestCase):
         self.assertIn("failed", diagnostics)
         self.assertNotIn("secret", diagnostics)
 
+    def test_export_diagnostics_includes_sanitized_create_failure(self) -> None:
+        import zipfile
+
+        self.facade.record_operation_failure("create_direct_batch", RuntimeError("token=secret"))
+        report = self.facade.export_diagnostics()
+
+        with zipfile.ZipFile(report) as archive:
+            diagnostics = archive.read("diagnostics.json").decode("utf-8")
+        self.assertIn("create_direct_batch", diagnostics)
+        self.assertIn("RuntimeError", diagnostics)
+        self.assertNotIn("secret", diagnostics)
+
 
 if __name__ == "__main__":
     unittest.main()

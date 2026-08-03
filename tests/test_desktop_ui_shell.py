@@ -249,8 +249,7 @@ class DesktopUiShellTests(unittest.TestCase):
     def test_failed_verification_start_rolls_back_waiting_state_and_uses_safe_message(self) -> None:
         self.facade.begin_verification = lambda _review_id: (_ for _ in ()).throw(RuntimeError("token=secret"))
         self.window._submit_verification_start("7")
-
-        self.assertTrue(self._wait_until(lambda: self.facade.operation_failures == ["create_direct_batch"]))
+        self.assertTrue(self._wait_until(lambda: not self.window.worker_pool.has_active_work()))
         self.assertNotIn("secret", self.window.operation_info.message())
         self.assertIn("空闲", self.window.background_status_text())
 

@@ -45,7 +45,7 @@ class DesktopUiAccessibilityTests(unittest.TestCase):
             self.assertTrue(button.toolTip())
 
     def test_page_stack_and_background_status_are_named_for_assistive_technology(self) -> None:
-        self.assertEqual(self.window.page_stack.accessibleName(), "Main content")
+        self.assertEqual(self.window.page_stack.accessibleName(), "主内容")
         self.assertEqual(self.window.background_status.accessibleName(), "后台状态：空闲")
         self.window.set_background_status(BackgroundStatus.RUNNING)
         self.assertEqual(self.window.background_status.accessibleName(), "后台状态：运行中")

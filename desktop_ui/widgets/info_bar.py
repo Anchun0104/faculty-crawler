@@ -12,7 +12,7 @@ class InfoBar(QFrame):
         super().__init__(parent)
         self.setObjectName("infoBar")
         self.setFrameShape(QFrame.StyledPanel)
-        self.setAccessibleName("Information")
+        self.setAccessibleName("信息提示")
         self._label = QLabel(text, self)
         self._label.setWordWrap(True)
         layout = QHBoxLayout(self)

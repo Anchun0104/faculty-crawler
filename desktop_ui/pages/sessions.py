@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from desktop_ui.widgets.data_table import DataTable
@@ -114,6 +115,17 @@ class SessionsPage(QWidget):
             )
             for row in rows
         )
+        for index, row in enumerate(rows):
+            expiry_item = self.table.item(index, 3)
+            if expiry_item is None:
+                continue
+            state = self._expiry_state(row)
+            if state == "warning":
+                expiry_item.setForeground(QColor("#B56A08"))
+                expiry_item.setBackground(QColor("#FFF3DC"))
+            elif state == "expired":
+                expiry_item.setForeground(QColor("#C53B3F"))
+                expiry_item.setBackground(QColor("#FDECED"))
         self.table.setVisible(bool(rows))
         self.empty_state.setVisible(not rows)
         if self._selected and self._selected not in {str(row["hostname"]) for row in rows}:

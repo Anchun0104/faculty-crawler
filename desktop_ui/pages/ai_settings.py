@@ -299,7 +299,13 @@ class AiSettingsPage(QWidget):
             values = (
                 str(row.get("created_at", "")),
                 str(row.get("task_id", "")),
-                str(row.get("operation", "")),
+                {
+                    "translation": "翻译",
+                    "classification": "分类",
+                    "extraction": "提取",
+                    "extract_profile": "提取个人主页",
+                    "parse": "解析",
+                }.get(str(row.get("operation", "")), str(row.get("operation", ""))),
                 str(row.get("model", "")),
                 _format_tokens(int(row.get("input_tokens", 0))),
                 _format_tokens(int(row.get("output_tokens", 0))),

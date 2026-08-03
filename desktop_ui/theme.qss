@@ -1,5 +1,4 @@
 QWidget {
-    background-color: @APP_BACKGROUND@;
     color: @TEXT_PRIMARY@;
     font-family: "Segoe UI Variable", "Microsoft YaHei UI", "Segoe UI";
     font-size: 14px;
@@ -77,7 +76,8 @@ QFrame#quickStartCard,
 QFrame#runBatchList,
 QFrame#runDetailPanel,
 QFrame#storageUsageCard,
-QFrame#storageRetentionCard {
+QFrame#storageRetentionCard,
+QFrame#mockBrowserCard {
     background: @SURFACE_PRIMARY@;
     border: 1px solid @BORDER_DEFAULT@;
     border-radius: 12px;
@@ -97,8 +97,14 @@ QPushButton:disabled { color: @TEXT_TERTIARY@; background: #F7F9FB; border-color
 QPushButton#primaryButton { background: @PRIMARY@; border: 1px solid @PRIMARY@; color: white; font-weight: 600; }
 QPushButton#primaryButton:hover { background: @PRIMARY_HOVER@; border-color: @PRIMARY_HOVER@; }
 QPushButton#primaryButton:pressed { background: @PRIMARY_PRESSED@; border-color: @PRIMARY_PRESSED@; }
+QPushButton#primaryButton:disabled {
+    color: @TEXT_TERTIARY@;
+    background: #F7F9FB;
+    border-color: @BORDER_SUBTLE@;
+}
 QPushButton#dangerButton { background: @SURFACE_PRIMARY@; border-color: #E6A8A9; color: @DANGER@; }
 QPushButton#dangerButton:hover { background: @DANGER_SOFT@; }
+QPushButton#dangerButton:disabled { color: @TEXT_TERTIARY@; background: #F7F9FB; border-color: @BORDER_SUBTLE@; }
 
 QLineEdit, QPlainTextEdit, QTextEdit, QComboBox, QDoubleSpinBox {
     background: @SURFACE_PRIMARY@;
@@ -158,6 +164,9 @@ QScrollBar::handle:horizontal { background: #C5D0DB; border-radius: 5px; min-wid
 #timelineEvent { border-bottom: 1px solid @BORDER_SUBTLE@; }
 #timelineDot { color: @PRIMARY@; font-size: 11px; }
 #timelineTime { color: @TEXT_SECONDARY@; font-size: 12px; }
+#mockBrowserCard { background: @SURFACE_SECONDARY@; }
+#browserAddress { background: #E8EDF3; border-bottom: 1px solid @BORDER_DEFAULT@; color: @TEXT_SECONDARY@; padding: 4px 6px; }
+#browserBody { background: @SURFACE_SECONDARY@; color: @TEXT_SECONDARY@; padding: 8px; }
 #settingsNavButton {
     background: transparent;
     border: 1px solid transparent;

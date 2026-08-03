@@ -13,11 +13,11 @@ from desktop_ui.tokens import LIGHT_TOKENS
 class Inspector(QFrame):
     """Shows selected-row details at the approved 360 px desktop width."""
 
-    def __init__(self, title: str = "Details", parent: QWidget | None = None) -> None:
+    def __init__(self, title: str = "详情", parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("taskInspector")
         self.setFixedWidth(LIGHT_TOKENS.inspector_width)
-        self.setAccessibleName(f"{title} inspector")
+        self.setAccessibleName(f"{title}检查器")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         self.title = QLabel(title, self)

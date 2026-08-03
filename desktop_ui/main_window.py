@@ -172,13 +172,13 @@ class MainWindow(QMainWindow):
         layout.setSpacing(16)
         title = QLabel("教师目录采集器", content)
         title.setObjectName("shellTitle")
-        title.setAccessibleName("Application title")
+        title.setAccessibleName("应用标题")
         layout.addWidget(title)
         self.operation_info = InfoBar("后台服务正常，可以开始工作。", content)
         self.operation_info.setAccessibleName("后台操作通知")
         layout.addWidget(self.operation_info)
         self.page_stack = QStackedWidget(content)
-        self.page_stack.setAccessibleName("Main content")
+        self.page_stack.setAccessibleName("主内容")
         for item in NAVIGATION_ITEMS:
             page = self._build_page(item.page_id, item.label)
             page.setObjectName(f"page_{item.page_id}")
@@ -246,6 +246,7 @@ class MainWindow(QMainWindow):
 
         dialog = NewCrawlDialog(
             self.facade,
+            default_output_dir=getattr(self.facade, "ui_default_output_dir", None),
             default_budget_usd=self._default_budget_usd,
             parent=self,
         )

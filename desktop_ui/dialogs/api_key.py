@@ -25,7 +25,7 @@ class ApiKeyDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("替换 API Key")
-        self.setAccessibleName("Replace API key")
+        self.setAccessibleName("替换 API Key")
         self.setMinimumWidth(440)
 
         layout = QVBoxLayout(self)
@@ -46,7 +46,7 @@ class ApiKeyDialog(QDialog):
         self.key_edit = QLineEdit(self)
         self.key_edit.setEchoMode(QLineEdit.Password)
         self.key_edit.setPlaceholderText("粘贴新的 API Key")
-        self.key_edit.setAccessibleName("New API key")
+        self.key_edit.setAccessibleName("新的 API Key")
         self.key_edit.setClearButtonEnabled(True)
         layout.addWidget(self.key_edit)
         self.error_label = QLabel(self)
@@ -58,6 +58,8 @@ class ApiKeyDialog(QDialog):
             QDialogButtonBox.Cancel | QDialogButtonBox.Save,
             parent=self,
         )
+        self.buttons.button(QDialogButtonBox.Cancel).setText("取消")
+        self.buttons.button(QDialogButtonBox.Save).setText("保存")
         self.buttons.rejected.connect(self.reject)
         self.buttons.accepted.connect(self.accept)
         layout.addWidget(self.buttons)

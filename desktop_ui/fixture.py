@@ -19,6 +19,7 @@ class FixtureFacade:
     def __init__(self) -> None:
         self.created_requests: list[NewCrawlRequest] = []
         self.cleared_hosts: list[str] = []
+        self.ui_default_output_dir = Path(r"D:\Faculty Results")
         self._ai_settings = AiSettingsView(
             enabled=True,
             provider="deepseek",

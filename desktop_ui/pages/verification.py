@@ -139,6 +139,6 @@ class VerificationPage(QWidget):
     def _reason_text(reason: object) -> str:
         return {
             "challenge": "访问验证",
-            "captcha": "CAPTCHA / Challenge",
+            "captcha": "CAPTCHA 验证",
             "login": "需要登录",
         }.get(str(reason), str(reason))

@@ -49,7 +49,7 @@ class SettingsPage(QWidget):
 
         self.page_header = PageHeader(
             "设置",
-            "搜索和管理 Faculty Crawler 的本地行为。",
+            "搜索和管理教师目录采集器的本地行为。",
             parent=self,
         )
         layout.addWidget(self.page_header)

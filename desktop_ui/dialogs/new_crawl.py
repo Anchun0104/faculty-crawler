@@ -159,6 +159,7 @@ class NewCrawlDialog(QDialog):
         self.discipline_edit = QLineEdit("General Faculty", self)
         details.addRow("学科", self.discipline_edit)
         self.output_dir_edit = QLineEdit(str(default_output_dir), self)
+        self.output_dir_edit.textChanged.connect(self._refresh_batch_confirmation)
         output_row = QWidget(self)
         output_layout = QHBoxLayout(output_row)
         output_layout.setContentsMargins(0, 0, 0, 0)
@@ -249,6 +250,7 @@ class NewCrawlDialog(QDialog):
         self._refresh_url_validation()
 
     def select_xlsx_mode(self) -> None:
+        self._url_validation_timer.stop()
         self._mode = "xlsx"
         self.source_stack.setCurrentIndex(1)
         self.url_mode_button.setChecked(False)
@@ -272,6 +274,8 @@ class NewCrawlDialog(QDialog):
             self.output_dir_edit.setText(value)
 
     def _refresh_url_validation(self) -> None:
+        if self._mode != "urls":
+            return
         self._prepared_urls = self.facade.prepare_urls(self.url_editor.toPlainText())
         valid_count = len(self._prepared_urls.valid_urls)
         duplicate_count = len(self._prepared_urls.duplicate_lines)
@@ -292,6 +296,7 @@ class NewCrawlDialog(QDialog):
 
     def _schedule_url_validation(self) -> None:
         if self._mode == "urls":
+            self.start_button.setEnabled(False)
             self._url_validation_timer.start()
 
     def _set_duplicate_details(self, duplicates: tuple[tuple[int, str], ...]) -> None:
@@ -311,6 +316,14 @@ class NewCrawlDialog(QDialog):
         self.confirmation_label.setText(
             f"将创建 1 个批次任务，包含 {school_count} 所学校。输出目录：{output_dir}"
         )
+
+    def _refresh_batch_confirmation(self, _value: str = "") -> None:
+        school_count = (
+            len(self._prepared_urls.valid_urls)
+            if self._mode == "urls"
+            else len(self._xlsx_schools)
+        )
+        self._set_batch_confirmation(school_count)
 
     def _refresh_xlsx_validation(self) -> None:
         if not self._xlsx_path:
@@ -350,6 +363,8 @@ class NewCrawlDialog(QDialog):
 
     def _start(self) -> None:
         if self._mode == "urls":
+            self._url_validation_timer.stop()
+            self._refresh_url_validation()
             if not self._prepared_urls.can_start:
                 return
             request = self._request()

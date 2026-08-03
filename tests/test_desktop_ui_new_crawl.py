@@ -168,6 +168,36 @@ class NewCrawlDialogTests(unittest.TestCase):
         QTest.qWait(160)
         self.assertEqual(self.facade.prepare_url_calls, initial_calls + 1)
 
+    def test_start_revalidates_when_an_edit_is_still_waiting_for_debounce(self) -> None:
+        """A click after an invalid edit must not submit the prior valid URL state."""
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty")
+        QTest.qWait(160)
+        self.dialog.url_editor.setPlainText("not-a-url")
+
+        self.dialog.start_button.click()
+
+        self.assertEqual(self.facade.created_direct, [])
+
+    def test_pending_url_debounce_cannot_overwrite_xlsx_state(self) -> None:
+        """Switching source modes must cancel URL work before it updates XLSX controls."""
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty")
+        self.dialog.select_xlsx_mode()
+        self.dialog.set_xlsx_path(Path("schools.xlsx"))
+
+        QTest.qWait(160)
+
+        self.assertEqual(self.dialog.summary_label.text(), "2 所学校已验证 · 将创建 1 个批次任务，包含 2 所学校")
+        self.assertEqual(self.dialog.start_button.text(), "开始批次（2 所学校）")
+
+    def test_output_edit_refreshes_batch_confirmation(self) -> None:
+        """The explicit output confirmation must follow manual directory edits."""
+        self.dialog.url_editor.setPlainText("https://one.edu/faculty")
+        QTest.qWait(160)
+
+        self.dialog.output_dir_edit.setText("manual-output")
+
+        self.assertIn("输出目录：manual-output", self.dialog.confirmation_label.text())
+
     def test_access_compliance_infobar_is_visible_before_batch_start(self) -> None:
         """Operators need an explicit access reminder before initiating a crawl batch."""
         self.assertIn("robots", self.dialog.compliance_info.message())

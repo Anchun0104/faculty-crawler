@@ -12,3 +12,30 @@ QTextEdit:focus,
 QComboBox:focus {
     border: 2px solid @PRIMARY@;
 }
+
+QTableWidget {
+    background: #FFFFFF;
+    border: 1px solid #E5EAF0;
+    gridline-color: transparent;
+    selection-background-color: #E8F2FB;
+    selection-color: #18212F;
+}
+
+QTableWidget::item {
+    border-bottom: 1px solid #EDF1F5;
+    padding: 0 8px;
+}
+
+QTableWidget::item:selected {
+    background-color: #E8F2FB;
+    color: #18212F;
+}
+
+QHeaderView::section {
+    background: #F8FAFC;
+    border: 0;
+    border-bottom: 1px solid #E5EAF0;
+    color: #526070;
+    font-weight: 600;
+    padding: 0 8px;
+}

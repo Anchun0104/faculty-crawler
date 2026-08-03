@@ -26,6 +26,10 @@ class SessionsPage(QWidget):
 
     def refresh(self) -> None:
         rows = self.facade.session_rows() if hasattr(self.facade, "session_rows") else ()
+        hostnames = {str(row["hostname"]) for row in rows}
+        if self._selected not in hostnames:
+            self._selected = ""
+            self.clear_button.setEnabled(False)
         self.table.set_rows((str(row["hostname"]), (row["hostname"], row["saved_at"], row["expires_at"])) for row in rows)
         self.table.setVisible(bool(rows)); self.empty_state.setVisible(not rows)
 

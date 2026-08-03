@@ -6,7 +6,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 
 class FakeFacade:
@@ -61,3 +61,50 @@ class DesktopPageTests(unittest.TestCase):
         from desktop_ui.pages.storage import StoragePage
         page = StoragePage(FakeFacade())
         self.assertIn("1.0 KB", page.usage_label.text())
+
+    def test_temporary_cleanup_requires_confirmation(self):
+        from desktop_ui.pages.storage import StoragePage
+        page = StoragePage(FakeFacade())
+        spy = QSignalSpy(page.clear_temporary_requested)
+        original = QMessageBox.question
+        QMessageBox.question = staticmethod(lambda *_args: QMessageBox.No)
+        try:
+            page.clear_temp_button.click()
+            self.assertEqual(spy.count(), 0)
+            QMessageBox.question = staticmethod(lambda *_args: QMessageBox.Yes)
+            page.clear_temp_button.click()
+        finally:
+            QMessageBox.question = original
+        self.assertEqual(spy.count(), 1)
+
+    def test_verification_has_selected_site_workflow_pane(self):
+        from desktop_ui.pages.verification import VerificationPage
+        page = VerificationPage(FakeFacade())
+        page.select_review("1")
+        self.assertIn("https://cs.stanford.edu", page.selected_site_label.text())
+        self.assertIn("Visible browser", page.browser_status_label.text())
+        self.assertIn("1.", page.instructions_label.text())
+
+    def test_refresh_clears_stale_session_and_verification_selections(self):
+        from desktop_ui.pages.sessions import SessionsPage
+        from desktop_ui.pages.verification import VerificationPage
+        facade = FakeFacade()
+        sessions = SessionsPage(facade)
+        verification = VerificationPage(facade)
+        sessions._select("cs.stanford.edu")
+        verification.select_review("1")
+        facade.session_rows = lambda: ()
+        facade.verification_rows = lambda **_kwargs: ()
+        sessions.refresh(); verification.refresh()
+        self.assertFalse(sessions.clear_button.isEnabled())
+        self.assertFalse(verification.start_button.isEnabled())
+
+    def test_task_filter_offers_policy_confirmation_status(self):
+        from desktop_ui.pages.tasks import TasksPage
+        page = TasksPage(FakeFacade())
+        self.assertGreaterEqual(page.status_filter.findText("needs_policy_confirmation"), 0)
+
+    def test_data_table_uses_soft_row_treatment_without_grid(self):
+        from desktop_ui.widgets.data_table import DataTable
+        table = DataTable(("Value",))
+        self.assertFalse(table.showGrid())

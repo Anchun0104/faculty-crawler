@@ -20,6 +20,7 @@ class DataTable(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
         self.setAlternatingRowColors(False)
+        self.setShowGrid(False)
         self.verticalHeader().setVisible(False)
         self.verticalHeader().setDefaultSectionSize(40)
         self.horizontalHeader().setStretchLastSection(True)

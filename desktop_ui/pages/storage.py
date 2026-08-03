@@ -30,7 +30,7 @@ class StoragePage(QWidget):
         self.file_count_label = QLabel("0 files", usage); usage_layout.addWidget(self.file_count_label); layout.addWidget(usage)
         actions = QFrame(self); actions.setObjectName("settingsGroup"); rows = QVBoxLayout(actions)
         self.export_button = QPushButton("Export diagnostics", actions); self.export_button.setObjectName("primaryButton"); self.export_button.clicked.connect(self.diagnostics_export_requested); rows.addWidget(self.export_button)
-        self.clear_temp_button = QPushButton("Clear temporary data", actions); self.clear_temp_button.clicked.connect(self.clear_temporary_requested); rows.addWidget(self.clear_temp_button)
+        self.clear_temp_button = QPushButton("Clear temporary data", actions); self.clear_temp_button.clicked.connect(self._confirm_temporary_clear); rows.addWidget(self.clear_temp_button)
         self.clear_internal_button = QPushButton("Clear internal data", actions); self.clear_internal_button.setObjectName("dangerButton"); self.clear_internal_button.clicked.connect(self._confirm_internal_clear); rows.addWidget(self.clear_internal_button)
         layout.addWidget(actions); layout.addStretch(1); self.refresh()
 
@@ -41,3 +41,11 @@ class StoragePage(QWidget):
     def _confirm_internal_clear(self) -> None:
         if QMessageBox.question(self, "Clear internal data", "This clears local sessions, run metadata, logs and diagnostics. Exported Excel files are kept. Continue?") == QMessageBox.Yes:
             self.clear_internal_requested.emit()
+
+    def _confirm_temporary_clear(self) -> None:
+        if QMessageBox.question(
+            self,
+            "Clear temporary data",
+            "This removes temporary files and screenshots. Continue?",
+        ) == QMessageBox.Yes:
+            self.clear_temporary_requested.emit()

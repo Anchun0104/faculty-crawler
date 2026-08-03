@@ -19,7 +19,7 @@ class TasksPage(QWidget):
         title = QLabel("Tasks", self); title.setObjectName("pageHeading"); layout.addWidget(title)
         tools = QHBoxLayout(); self.search = QLineEdit(self); self.search.setPlaceholderText("Search tasks")
         self.search.textChanged.connect(self._render); tools.addWidget(self.search, 1)
-        self.status_filter = QComboBox(self); self.status_filter.addItems(("All status", "ready", "running", "completed", "failed", "paused_budget"))
+        self.status_filter = QComboBox(self); self.status_filter.addItems(("All status", "needs_policy_confirmation", "ready", "running", "completed", "failed", "paused_budget"))
         self.status_filter.currentTextChanged.connect(self._render); tools.addWidget(self.status_filter); layout.addLayout(tools)
         body = QHBoxLayout(); self.table = DataTable(("Task", "Discipline", "Status", "Updated"), self); self.table.selection_changed.connect(self.select_task)
         self.empty_state = EmptyState("No matching tasks", "Adjust the filters or create a new crawl.", parent=self)

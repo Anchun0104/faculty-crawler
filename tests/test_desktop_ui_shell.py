@@ -78,6 +78,14 @@ class DesktopUiShellTests(unittest.TestCase):
             ("overview", "tasks", "verification", "runs", "sessions", "settings"),
         )
 
+    def test_shell_can_construct_with_a_bare_facade(self) -> None:
+        """Shell/accessibility consumers need not implement settings operations."""
+        window = MainWindow(facade=object())
+        self.addCleanup(window.close)
+
+        self.assertEqual(window.page_ids(), self.window.page_ids())
+        self.assertFalse(window.settings_page.ai_page.isEnabled())
+
     def test_navigation_replaces_the_current_page(self) -> None:
         self.window.navigate("runs")
 

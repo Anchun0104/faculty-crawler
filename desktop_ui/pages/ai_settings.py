@@ -239,14 +239,30 @@ class AiSettingsPage(QWidget):
         self.usage_table.setMinimumHeight(180)
         layout.addWidget(self.usage_table, 1)
 
-    def refresh(self) -> None:
+    def _can_refresh(self) -> bool:
+        """Whether this facade provides the optional AI-settings read contract."""
+        return all(
+            callable(getattr(self.facade, method, None))
+            for method in ("ai_settings", "ai_usage")
+        )
+
+    def refresh(self) -> bool:
         """Reload only non-secret settings metadata and recorded usage."""
+        if not self._can_refresh():
+            # MainWindow's shell/accessibility consumers intentionally use a
+            # bare facade.  Leave this optional page inert instead of imposing
+            # AI operations on that narrow shell contract.  Calls made by a
+            # real facade still propagate normally; no errors are swallowed.
+            self.setEnabled(False)
+            return False
+        self.setEnabled(True)
         settings = self.facade.ai_settings()
         usage = self.facade.ai_usage()
         self._render_settings(settings)
         self._render_usage(usage)
         details = self.facade.ai_usage_details() if hasattr(self.facade, "ai_usage_details") else ()
         self._render_usage_details(details)
+        return True
 
     def _render_settings(self, settings: AiSettingsView) -> None:
         with QSignalBlocker(self.enabled_checkbox):

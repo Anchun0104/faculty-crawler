@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop_ui.main_window import MainWindow
-from desktop_ui.models import AiSettingsView, AiUsageView, NewCrawlRequest
+from desktop_ui.models import AiSettingsView, AiUsageView, NewCrawlRequest, UrlPreparation
 from desktop_ui.pages.settings import SettingsPage
 from desktop_ui.widgets.status_badge import BackgroundStatus
 
@@ -56,6 +56,9 @@ class ShellFacade:
     def session_rows(self):
         return ()
 
+    def prepare_urls(self, _raw: str) -> UrlPreparation:
+        return UrlPreparation((), (), ())
+
 
 class DesktopUiShellTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -96,6 +99,16 @@ class DesktopUiShellTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key_Comma, Qt.ControlModifier)
 
         self.assertEqual(self.window.current_page_id(), "settings")
+
+    def test_ctrl_n_opens_new_crawl_and_ctrl_f_focuses_task_search(self) -> None:
+        QTest.keyClick(self.window, Qt.Key_N, Qt.ControlModifier)
+        self.assertTrue(self.window._new_crawl_dialog.isVisible())
+        QTest.keyClick(self.window, Qt.Key_Escape)
+        QTest.qWait(10)
+        self.window.navigate("tasks")
+        self.window._focus_current_search()
+        self.assertEqual(self.window._find_shortcut.context(), Qt.ApplicationShortcut)
+        self.assertTrue(self.window.tasks_page.search.focusPolicy() & Qt.StrongFocus)
 
     def test_settings_navigation_uses_the_real_ai_settings_page(self) -> None:
         self.window.navigate("settings")

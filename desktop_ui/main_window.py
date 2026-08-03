@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self._waiting_for_verification = False
         self._verification_start_pending = False
         self._shutdown_complete = False
+        self._default_budget_usd = 20.0
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -61,6 +63,15 @@ class MainWindow(QMainWindow):
         self._settings_shortcut = QShortcut(QKeySequence("Ctrl+,"), self)
         self._settings_shortcut.setContext(Qt.WindowShortcut)
         self._settings_shortcut.activated.connect(lambda: self.navigate("settings"))
+        self._new_crawl_shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        self._new_crawl_shortcut.setContext(Qt.ApplicationShortcut)
+        self._new_crawl_shortcut.activated.connect(self._open_new_crawl)
+        self._find_shortcut = QShortcut(QKeySequence("Ctrl+F"), self)
+        self._find_shortcut.setContext(Qt.ApplicationShortcut)
+        self._find_shortcut.activated.connect(self._focus_current_search)
+        self._escape_shortcut = QShortcut(QKeySequence("Esc"), self)
+        self._escape_shortcut.setContext(Qt.ApplicationShortcut)
+        self._escape_shortcut.activated.connect(self._escape_context)
         self._connect_worker_signals()
         self.navigate("overview")
 
@@ -182,6 +193,16 @@ class MainWindow(QMainWindow):
         }
         if page_id == "settings":
             self.settings_page = SettingsPage(self.facade, self.page_stack)
+            self.settings_page.storage_page.clear_temporary_requested.connect(
+                lambda: self._submit(lambda: self.facade.clear_temporary_data())
+            )
+            self.settings_page.storage_page.clear_internal_requested.connect(
+                lambda: self._submit(lambda: self.facade.clear_internal_data())
+            )
+            self.settings_page.storage_page.diagnostics_export_requested.connect(
+                lambda: self._submit(lambda: self.facade.export_diagnostics())
+            )
+            self.settings_page.ai_page.budget_changed.connect(self._set_default_budget)
             return self.settings_page
         if page_id in page_types:
             page = page_types[page_id](self.facade, self.page_stack)
@@ -204,17 +225,23 @@ class MainWindow(QMainWindow):
             page.start_requested.connect(lambda review_id: self._submit_verification_start(review_id))
             page.defer_requested.connect(
                 lambda review_id: self._submit(
-                    lambda: self.facade.resolve_verification(review_id, retry=False)
+                    lambda: self.facade.defer_verification(review_id)
                 )
             )
             page.complete_requested.connect(lambda review_id: self._submit_verification_finish(review_id))
         elif page_id == "sessions":
             page.clear_requested.connect(lambda hostname: self._submit(lambda: self.facade.clear_session(hostname)))
+        elif page_id in {"tasks", "runs"}:
+            page.export_requested.connect(self._export_task)
 
     def _open_new_crawl(self) -> None:
         from .dialogs.new_crawl import NewCrawlDialog
 
-        dialog = NewCrawlDialog(self.facade, parent=self)
+        dialog = NewCrawlDialog(
+            self.facade,
+            default_budget_usd=self._default_budget_usd,
+            parent=self,
+        )
         dialog.requested.connect(self._start_direct_batch)
         dialog.xlsx_requested.connect(
             lambda _path, request, source=dialog: self._start_xlsx_batch(
@@ -224,11 +251,17 @@ class MainWindow(QMainWindow):
         dialog.open()
         self._new_crawl_dialog = dialog
 
+    def _set_default_budget(self, value: float) -> None:
+        self._default_budget_usd = float(value)
+
     def _start_direct_batch(self, request) -> None:
         self._submit(lambda context: self._create_and_run_direct(request, context))
 
     def _start_xlsx_batch(self, schools: tuple[object, ...], request) -> None:
         self._submit(lambda context: self._create_and_run_xlsx(schools, request, context))
+
+    def _export_task(self, task_id: str) -> None:
+        self._submit(lambda: self.facade.export_task(task_id))
 
     def _create_and_run_direct(self, request, context):
         task_id = self.facade.create_direct_tasks(request)
@@ -264,7 +297,11 @@ class MainWindow(QMainWindow):
         if self._verification_start_pending:
             self._waiting_for_verification = True
             self._verification_start_pending = False
-        self.operation_info.set_message("Background operation completed.")
+        if isinstance(_result, dict) and _result and all(isinstance(value, Path) for value in _result.values()):
+            locations = ", ".join(str(value) for value in _result.values())
+            self.operation_info.set_message(f"Background operation completed. Output: {locations}")
+        else:
+            self.operation_info.set_message("Background operation completed.")
         self._refresh_after_command()
 
     def _worker_failed(self, _message: str) -> None:
@@ -284,6 +321,21 @@ class MainWindow(QMainWindow):
         ):
             if page is not None:
                 page.refresh()
+
+    def _focus_current_search(self) -> None:
+        page = self.page_stack.currentWidget()
+        search = getattr(page, "search", None)
+        if search is not None:
+            search.setFocus()
+
+    def _escape_context(self) -> None:
+        dialog = getattr(self, "_new_crawl_dialog", None)
+        if dialog is not None and dialog.isVisible():
+            dialog.reject()
+            return
+        inspector = getattr(self, "tasks_page", None)
+        if inspector is not None:
+            inspector.inspector.hide()
 
     def _update_background_status(self, active: bool) -> None:
         if active:
@@ -414,6 +466,10 @@ class MainWindow(QMainWindow):
         if self._shutdown_complete:
             return
         self._shutdown_complete = True
+        try:
+            self.facade.defer_verification("")
+        except (AttributeError, RuntimeError):
+            pass
         self.worker_pool.shutdown(-1)
         self.tray_icon.hide()
 

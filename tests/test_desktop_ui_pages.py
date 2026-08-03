@@ -11,9 +11,9 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 class FakeFacade:
     def task_rows(self, **_kwargs):
-        return ({"id": "task-1", "discipline": "Physics", "status": "ready", "created_at": "now", "updated_at": "now", "output_dir": "C:/output"},)
+        return ({"id": "task-1", "discipline": "Physics", "status": "completed", "created_at": "now", "updated_at": "now", "output_dir": "C:/output"},)
     def task_detail(self, task_id):
-        return {"id": task_id, "discipline": "Physics", "status": "ready", "schools": 1, "records": 0, "output_dir": "C:/output"}
+        return {"id": task_id, "discipline": "Physics", "status": "completed", "schools": 1, "records": 0, "output_dir": "C:/output"}
     def verification_rows(self, **_kwargs):
         return ({"id": "1", "task_id": "task-1", "school": "Stanford", "url": "https://cs.stanford.edu", "reason": "challenge", "status": "pending"},)
     def session_rows(self):
@@ -103,6 +103,26 @@ class DesktopPageTests(unittest.TestCase):
         from desktop_ui.pages.tasks import TasksPage
         page = TasksPage(FakeFacade())
         self.assertGreaterEqual(page.status_filter.findText("needs_policy_confirmation"), 0)
+
+    def test_task_export_emits_the_selected_completed_batch(self):
+        from desktop_ui.pages.tasks import TasksPage
+        page = TasksPage(FakeFacade())
+        spy = QSignalSpy(page.export_requested)
+
+        page.select_task("task-1")
+        page.export_button.click()
+
+        self.assertEqual(spy.at(0), ["task-1"])
+
+    def test_run_history_exports_the_selected_completed_batch(self):
+        from desktop_ui.pages.runs import RunsPage
+        page = RunsPage(FakeFacade())
+        spy = QSignalSpy(page.export_requested)
+
+        page._select("task-1")
+        page.export_button.click()
+
+        self.assertEqual(spy.at(0), ["task-1"])
 
     def test_data_table_uses_soft_row_treatment_without_grid(self):
         from desktop_ui.widgets.data_table import DataTable

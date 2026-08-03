@@ -101,11 +101,13 @@ class NewCrawlDialog(QDialog):
         facade: WorkflowFacade,
         *,
         default_output_dir: Path | None = None,
+        default_budget_usd: float = 20.0,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.facade = facade
         self._mode = "urls"
+        self._default_budget_usd = float(default_budget_usd)
         self._prepared_urls = UrlPreparation((), (), ())
         self._xlsx_path: Path | None = None
         self._xlsx_schools: tuple[object, ...] = ()
@@ -365,6 +367,7 @@ class NewCrawlDialog(QDialog):
             school_name=self.school_name_edit.text().strip(),
             discipline=self.discipline_edit.text().strip() or "General Faculty",
             use_ai=self.use_ai_checkbox.isChecked(),
+            budget_usd=self._default_budget_usd,
         )
 
     def _start(self) -> None:

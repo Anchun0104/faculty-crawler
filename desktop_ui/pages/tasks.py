@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
 from desktop_ui.widgets.data_table import DataTable
 from desktop_ui.widgets.empty_state import EmptyState
@@ -12,6 +12,7 @@ from desktop_ui.widgets.inspector import Inspector
 
 class TasksPage(QWidget):
     task_selected = Signal(str)
+    export_requested = Signal(str)
 
     def __init__(self, facade: object, parent: QWidget | None = None) -> None:
         super().__init__(parent); self.facade = facade; self._rows: dict[str, dict[str, object]] = {}
@@ -25,6 +26,12 @@ class TasksPage(QWidget):
         self.empty_state = EmptyState("No matching tasks", "Adjust the filters or create a new crawl.", parent=self)
         body.addWidget(self.table, 1); body.addWidget(self.empty_state, 1)
         self.inspector = Inspector("Task details", self); body.addWidget(self.inspector); layout.addLayout(body, 1)
+        self.export_button = QPushButton("Export results", self)
+        self.export_button.setObjectName("primaryButton")
+        self.export_button.setEnabled(False)
+        self.export_button.clicked.connect(lambda: self.export_requested.emit(self._selected))
+        layout.addWidget(self.export_button)
+        self._selected = ""
         self.refresh()
 
     def refresh(self) -> None:
@@ -38,5 +45,8 @@ class TasksPage(QWidget):
         self.table.setVisible(bool(rows)); self.empty_state.setVisible(not rows)
 
     def select_task(self, task_id: str) -> None:
+        self._selected = task_id
         details = self.facade.task_detail(task_id) if hasattr(self.facade, "task_detail") else self._rows.get(task_id, {})
-        self.inspector.show_details(details); self.task_selected.emit(task_id)
+        self.inspector.show_details(details)
+        self.export_button.setEnabled(str(details.get("status", "")) == "completed")
+        self.task_selected.emit(task_id)

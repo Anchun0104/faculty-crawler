@@ -22,10 +22,22 @@ class ReversibleProtector:
 class DirectTaskService:
     def __init__(self) -> None:
         self.commands: list[dict[str, object]] = []
+        self.provider = object()
 
     def create_direct_url_task(self, **command: object) -> str:
         self.commands.append(command)
         return "task-1"
+
+    def create_task_from_schools(self, **command: object) -> str:
+        self.commands.append(command)
+        return "task-xlsx"
+
+    def export(self, task_id: str, output_dir=None):
+        self.exported = (task_id, output_dir)
+        return {"accepted": Path("output") / "accepted.xlsx"}
+
+    def cancel_access_verification(self) -> None:
+        self.cancelled_verification = True
 
 
 class WorkflowFacadeTests(unittest.TestCase):
@@ -103,6 +115,43 @@ class WorkflowFacadeTests(unittest.TestCase):
         self.assertFalse(view.key_configured)
         self.assertEqual(configuration, ProviderConfiguration.local())
         self.assertEqual(key, "")
+
+    def test_xlsx_task_is_confirmed_for_the_immediate_desktop_run(self) -> None:
+        school = type("School", (), {})()
+        self.facade.create_xlsx_task((school,), NewCrawlRequest((), self.paths.reports))
+
+        self.assertTrue(self.service.commands[0]["policy_confirmed"])
+
+    def test_save_and_delete_replace_the_live_provider_without_returning_key(self) -> None:
+        self.facade.save_ai_settings(
+            SaveAiSettings(True, "deepseek", "https://api.deepseek.com", "deepseek-v4-pro", "secret-key")
+        )
+        configured = self.service.provider
+        self.assertEqual(getattr(configured, "api_key"), "secret-key")
+
+        self.facade.delete_ai_key()
+
+        self.assertNotEqual(self.service.provider, configured)
+        self.assertEqual(getattr(self.service.provider, "api_key", ""), "")
+
+    def test_export_and_defer_are_worker_safe_facade_operations(self) -> None:
+        exported = self.facade.export_task("task-1")
+        self.facade.defer_verification("7")
+
+        self.assertEqual(exported["accepted"], Path("output") / "accepted.xlsx")
+        self.assertTrue(self.service.cancelled_verification)
+
+    def test_task_detail_redacts_secret_bearing_diagnostics(self) -> None:
+        self.database.summary = lambda _task_id: {
+            "id": "task", "discipline": "Physics", "status": "failed", "output_dir": "out",
+            "created_at": "now", "updated_at": "now", "schools": {}, "candidates": {},
+            "spent_usd": 0, "budget_usd": 20, "warning": "token=secret", "error": "api_key: abc",
+        }
+
+        detail = self.facade.task_detail("task")
+
+        self.assertNotIn("secret", detail["warning"])
+        self.assertNotIn("abc", detail["error"])
 
 
 if __name__ == "__main__":

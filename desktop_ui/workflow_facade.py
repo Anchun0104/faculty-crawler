@@ -13,6 +13,7 @@ from faculty_workflow.importers import load_schools
 from faculty_workflow.models import SchoolInput, normalize_url
 
 from .models import AiSettingsView, AiUsageView, NewCrawlRequest, SaveAiSettings, UrlPreparation
+from .privacy import redact_diagnostic
 
 if TYPE_CHECKING:
     from faculty_workflow.service import WorkflowService
@@ -88,6 +89,7 @@ class WorkflowFacade:
             generate_ai_policy=request.use_ai,
             routine_model=request.routine_model,
             escalation_model=request.escalation_model,
+            policy_confirmed=True,
         )
 
     def ai_settings(self) -> AiSettingsView:
@@ -97,6 +99,7 @@ class WorkflowFacade:
     def save_ai_settings(self, command: SaveAiSettings) -> AiSettingsView:
         configuration = self._configuration_from(command)
         self.ai_settings_store.save(configuration, command.api_key)
+        self._replace_live_provider(configuration)
         return self._ai_settings_view(configuration)
 
     def delete_ai_key(self) -> AiSettingsView:
@@ -106,6 +109,7 @@ class WorkflowFacade:
         # started, while keeping plaintext entirely inside the settings layer.
         self.ai_settings_store.save(ProviderConfiguration.local(), None)
         self.ai_settings_store.delete_key()
+        self._replace_live_provider(ProviderConfiguration.local())
         return self.ai_settings()
 
     def test_ai_connection(self) -> object:
@@ -162,7 +166,8 @@ class WorkflowFacade:
             "schools": sum(int(value) for value in task["schools"].values()),
             "records": sum(int(value) for value in task["candidates"].values()),
             "spent_usd": float(task["spent_usd"]), "budget_usd": float(task["budget_usd"]),
-            "warning": str(task["warning"]), "error": str(task["error"]),
+            "warning": redact_diagnostic(task["warning"]),
+            "error": redact_diagnostic(task["error"]),
         }
 
     def verification_rows(self, *, limit: int = 200) -> tuple[dict[str, object], ...]:
@@ -173,6 +178,10 @@ class WorkflowFacade:
 
     def resolve_verification(self, review_id: str, *, retry: bool) -> None:
         self.database.resolve_access_review(int(review_id), retry=retry)
+
+    def defer_verification(self, review_id: str) -> None:
+        """Close the visible browser but leave the review pending for later resume."""
+        self.service.cancel_access_verification()
 
     def begin_verification(self, review_id: str) -> None:
         """Launch the existing visible-browser verification flow off the GUI thread."""
@@ -185,6 +194,10 @@ class WorkflowFacade:
     def run_task(self, task_id: str, *, on_progress=None) -> dict[str, object]:
         """Run the established batch workflow; callers must invoke this from a worker."""
         return dict(self.service.run_task(task_id, on_progress=on_progress))
+
+    def export_task(self, task_id: str) -> dict[str, Path]:
+        """Export a completed task; callers execute this potentially slow I/O in a worker."""
+        return dict(self.service.export(task_id))
 
     def session_rows(self) -> tuple[dict[str, object], ...]:
         store = getattr(getattr(self.service, "fetcher", None), "session_store", None)
@@ -205,6 +218,24 @@ class WorkflowFacade:
         usage = RetentionService(self.app_paths).usage()
         return {"bytes": usage.bytes, "files": usage.files}
 
+    def clear_temporary_data(self) -> tuple[Path, ...]:
+        from crawler.retention import RetentionService
+
+        return tuple(RetentionService(self.app_paths).clear_temporary())
+
+    def clear_internal_data(self) -> tuple[Path, ...]:
+        from crawler.retention import RetentionService
+
+        return tuple(RetentionService(self.app_paths).clear_internal_data())
+
+    def export_diagnostics(self) -> Path:
+        from datetime import datetime
+        from crawler.diagnostics import build_problem_report
+
+        reports = Path(self.app_paths.reports)
+        name = f"desktop-diagnostics-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.zip"
+        return build_problem_report("desktop", [], reports / name)
+
     @staticmethod
     def _task_row(row: object) -> dict[str, object]:
         return {"id": str(row["id"]), "discipline": str(row["discipline"]),
@@ -219,6 +250,14 @@ class WorkflowFacade:
             model=configuration.model,
             key_configured=self.ai_settings_store.key_configured(),
         )
+
+    def _replace_live_provider(self, configuration: ProviderConfiguration) -> None:
+        """Update the already-running service after an encrypted settings change."""
+        api_key = self.ai_settings_store.keys.load() if configuration.enabled else ""
+        provider = self.ai_settings_store.build_provider(configuration, api_key)
+        from faculty_workflow.providers import DeepSeekProvider
+
+        self.service.provider = provider or DeepSeekProvider(api_key="")
 
     @staticmethod
     def _configuration_from(command: SaveAiSettings) -> ProviderConfiguration:

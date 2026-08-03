@@ -9,7 +9,12 @@ QPushButton:focus,
 QToolButton:focus,
 QLineEdit:focus,
 QTextEdit:focus,
+QPlainTextEdit:focus,
 QComboBox:focus {
+    border: 2px solid @PRIMARY@;
+}
+
+QDoubleSpinBox:focus {
     border: 2px solid @PRIMARY@;
 }
 

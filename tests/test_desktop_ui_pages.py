@@ -6,7 +6,7 @@ import unittest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtTest import QSignalSpy
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 
 
 class FakeFacade:
@@ -173,6 +173,30 @@ class DesktopPageTests(unittest.TestCase):
         page.export_button.click()
 
         self.assertEqual(spy.at(0), ["task-1"])
+
+    def test_run_history_uses_batch_detail_and_timeline_composition(self):
+        from desktop_ui.pages.runs import RunsPage
+
+        page = RunsPage(FakeFacade())
+
+        self.assertEqual(page.page_header.title.text(), "运行历史")
+        self.assertEqual(page.search.accessibleName(), "搜索运行或站点")
+        self.assertEqual(page.detail_panel.objectName(), "runDetailPanel")
+        self.assertEqual(page.timeline.objectName(), "runTimeline")
+        self.assertEqual(page.metrics[0].objectName(), "acceptedMetric")
+        self.assertIn("已接受", page.metrics[0].findChild(QLabel).text())
+
+    def test_site_sessions_uses_expiry_badges_and_chinese_destructive_copy(self):
+        from desktop_ui.pages.sessions import SessionsPage
+
+        page = SessionsPage(FakeFacade())
+
+        self.assertEqual(page.page_header.title.text(), "站点会话")
+        self.assertEqual(page.search.accessibleName(), "搜索站点")
+        self.assertEqual(page.table.horizontalHeaderItem(0).text(), "站点")
+        self.assertEqual(page.table.horizontalHeaderItem(3).text(), "计划清理")
+        self.assertEqual(page.clear_button.text(), "清除所选会话")
+        self.assertIn("加密", page.info_bar.text())
 
     def test_data_table_uses_soft_row_treatment_without_grid(self):
         from desktop_ui.widgets.data_table import DataTable

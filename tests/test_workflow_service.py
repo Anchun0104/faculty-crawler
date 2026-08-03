@@ -127,6 +127,33 @@ class WorkflowServiceTests(unittest.TestCase):
                 ],
             )
 
+    def test_cancelled_task_stops_after_the_current_school(self) -> None:
+        class CancellingService(WorkflowService):
+            def _run_school(self, task_id, school, policy, on_progress) -> None:
+                self.database.update_school(school["id"], status="completed")
+                self.cancel_task(task_id)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            database = WorkflowDatabase(root / "workflow.db")
+            task_id = database.create_task(
+                DisciplinePolicy("Physics", ("physics",), ()),
+                (
+                    SchoolInput("First", directory_url="https://first.example.edu/faculty"),
+                    SchoolInput("Second", directory_url="https://second.example.edu/faculty"),
+                ),
+                output_dir=root / "output",
+                policy_confirmed=True,
+            )
+
+            summary = CancellingService(database, provider=FakeProvider()).run_task(task_id)
+
+            self.assertEqual(summary["status"], "cancelled")
+            self.assertEqual(
+                [row["status"] for row in database.list_schools(task_id)],
+                ["completed", "pending"],
+            )
+
     def test_user_verified_external_directory_is_collected_with_primary_domain_email(self) -> None:
         class ExternalDirectoryCrawler(FakeCrawler):
             def parse_fetched_directory(self, url, html, fetch_status):

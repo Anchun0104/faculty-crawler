@@ -40,6 +40,9 @@ class DirectTaskService:
     def cancel_access_verification(self) -> None:
         self.cancelled_verification = True
 
+    def cancel_task(self, task_id: str) -> None:
+        self.cancelled_task = task_id
+
 
 class WorkflowFacadeTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -176,6 +179,11 @@ class WorkflowFacadeTests(unittest.TestCase):
 
         self.assertEqual(exported["accepted"], Path("output") / "accepted.xlsx")
         self.assertTrue(self.service.cancelled_verification)
+
+    def test_cancel_task_delegates_to_the_workflow_service(self) -> None:
+        self.facade.cancel_task("task-1")
+
+        self.assertEqual(self.service.cancelled_task, "task-1")
 
     def test_task_detail_redacts_secret_bearing_diagnostics(self) -> None:
         self.database.summary = lambda _task_id: {

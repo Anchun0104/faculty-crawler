@@ -5,6 +5,7 @@ import logging
 import gzip
 import inspect
 import re
+import threading
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -101,6 +102,18 @@ class WorkflowService:
         self.title_pipeline = title_pipeline or TitlePipeline(TitleClassifier())
         self.discovery_provider = discovery_provider or EmptyDiscoveryProvider()
         self.timeout_ms = timeout_ms
+        self._cancelled_task_ids: set[str] = set()
+        self._cancel_lock = threading.Lock()
+
+    def cancel_task(self, task_id: str) -> None:
+        """Stop scheduling further schools after the in-flight school completes."""
+        with self._cancel_lock:
+            self._cancelled_task_ids.add(task_id)
+        self.database.update_task(task_id, status="cancelled", warning="Stopped by user", error="")
+
+    def _task_cancelled(self, task_id: str) -> bool:
+        with self._cancel_lock:
+            return task_id in self._cancelled_task_ids
 
     def create_task(
         self,
@@ -231,6 +244,8 @@ class WorkflowService:
         school_ids: Iterable[int] | None = None,
         on_progress: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
+        with self._cancel_lock:
+            self._cancelled_task_ids.discard(task_id)
         self.database.recover_interrupted_task(task_id)
         task = self.database.get_task(task_id)
         if not task["policy_confirmed"]:
@@ -248,6 +263,8 @@ class WorkflowService:
             if selected_school_ids is not None:
                 schools = [school for school in schools if int(school["id"]) in selected_school_ids]
             for school in schools:
+                if self._task_cancelled(task_id):
+                    return self.database.summary(task_id)
                 self._emit(on_progress, task_id, school_id=school["id"], message="school_started")
                 if self.database.is_processed_school(task_id, school["name"]):
                     self.database.update_school(school["id"], status="skipped_processed")
@@ -271,9 +288,13 @@ class WorkflowService:
                     logger.exception("School workflow failed: %s", school["name"])
                     self.database.update_school(school["id"], status="failed", failure_reason=str(exc)[:500])
                 self._emit(on_progress, task_id, school_id=school["id"], message="school_finished")
+                if self._task_cancelled(task_id):
+                    return self.database.summary(task_id)
         except Exception as exc:
             self.database.update_task(task_id, status="failed", error=str(exc)[:500])
             raise
+        if self._task_cancelled(task_id):
+            return self.database.summary(task_id)
         self.database.update_task(task_id, status="completed")
         return self.database.summary(task_id)
 

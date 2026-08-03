@@ -218,6 +218,9 @@ class WorkflowFacade:
         """Run the established batch workflow; callers must invoke this from a worker."""
         return dict(self.service.run_task(task_id, on_progress=on_progress))
 
+    def cancel_task(self, task_id: str) -> None:
+        self.service.cancel_task(task_id)
+
     def export_task(self, task_id: str) -> dict[str, Path]:
         """Export a completed task; callers execute this potentially slow I/O in a worker."""
         return dict(self.service.export(task_id))

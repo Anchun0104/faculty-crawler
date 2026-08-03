@@ -132,7 +132,7 @@ class OverviewPage(QWidget):
 
     def refresh(self) -> None:
         rows = tuple(self.facade.task_rows()) if hasattr(self.facade, "task_rows") else ()
-        attention = sum(row.get("status") in {"failed", "paused_budget", "needs_verification", "review"} for row in rows)
+        attention = sum(row.get("status") in {"failed", "cancelled", "paused_budget", "needs_verification", "review"} for row in rows)
         self.task_count.setText(str(len(rows)))
         self.action_count.setText(str(attention))
         completed = sum(row.get("status") == "completed" for row in rows)
@@ -173,5 +173,6 @@ class OverviewPage(QWidget):
             "needs_verification": "等待人工验证",
             "review": "建议复核",
             "failed": "失败",
+            "cancelled": "已终止",
             "paused_budget": "已暂停",
         }.get(str(status), str(status))

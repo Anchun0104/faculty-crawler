@@ -58,6 +58,9 @@ class MainWindow(QMainWindow):
         self._shutdown_complete = False
         self._settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "FacultyCrawler", "FacultyCrawler")
         self._default_budget_usd = self._settings.value("desktop/default_budget_usd", 20.0, type=float)
+        self._default_output_dir = Path(str(self._settings.value(
+            "desktop/default_output_dir", Path.cwd() / "workflow_output"
+        )))
         self._nav_collapsed = False
         self._page_index: dict[str, int] = {}
         self._navigation_buttons: dict[str, QToolButton] = {}
@@ -238,6 +241,7 @@ class MainWindow(QMainWindow):
         elif page_id == "tasks":
             page.new_crawl_requested.connect(self._open_new_crawl)
             page.export_requested.connect(self._export_task)
+            page.cancel_requested.connect(self._cancel_task)
         elif page_id == "runs":
             page.export_requested.connect(self._export_task)
 
@@ -246,7 +250,7 @@ class MainWindow(QMainWindow):
 
         dialog = NewCrawlDialog(
             self.facade,
-            default_output_dir=getattr(self.facade, "ui_default_output_dir", None),
+            default_output_dir=self._default_output_dir,
             default_budget_usd=self._default_budget_usd,
             parent=self,
         )
@@ -263,14 +267,30 @@ class MainWindow(QMainWindow):
         self._default_budget_usd = float(value)
         self._settings.setValue("desktop/default_budget_usd", self._default_budget_usd)
 
+    def _set_default_output_dir(self, value: str | Path) -> None:
+        self._default_output_dir = Path(value)
+        self._settings.setValue("desktop/default_output_dir", str(self._default_output_dir))
+
     def _start_direct_batch(self, request) -> None:
+        self._set_default_output_dir(request.output_dir)
         self._submit(lambda: self._create_direct_batch(request))
 
     def _start_xlsx_batch(self, schools: tuple[object, ...], request) -> None:
+        self._set_default_output_dir(request.output_dir)
         self._submit(lambda context: self._create_and_run_xlsx(schools, request, context))
 
     def _export_task(self, task_id: str) -> None:
         self._submit(lambda: self.facade.export_task(task_id))
+
+    def _cancel_task(self, task_id: str) -> None:
+        try:
+            self.facade.cancel_task(task_id)
+        except Exception as error:
+            self.facade.record_operation_failure("cancel_task", error)
+            self.operation_info.set_message("终止任务失败。请查看脱敏诊断了解详情。")
+        else:
+            self.operation_info.set_message("已请求终止任务；当前学校完成后将停止后续采集。")
+        self._refresh_after_command()
 
     def _create_direct_batch(self, request) -> tuple[str, str]:
         try:

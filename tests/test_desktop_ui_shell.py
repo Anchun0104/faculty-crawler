@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -142,6 +143,14 @@ class DesktopUiShellTests(unittest.TestCase):
         self.window._set_default_budget(37.5)
         settings = QSettings(QSettings.IniFormat, QSettings.UserScope, "FacultyCrawler", "FacultyCrawler")
         self.assertEqual(settings.value("desktop/default_budget_usd", type=float), 37.5)
+
+    def test_selected_output_directory_becomes_the_next_crawl_default(self) -> None:
+        selected = "C:/Faculty Results"
+
+        self.window._set_default_output_dir(selected)
+        self.window._open_new_crawl()
+
+        self.assertEqual(Path(self.window._new_crawl_dialog.output_dir_edit.text()), Path(selected))
 
     def test_settings_navigation_uses_the_real_ai_settings_page(self) -> None:
         self.window.navigate("settings")

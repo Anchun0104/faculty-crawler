@@ -14,6 +14,7 @@ from desktop_ui.widgets.page_header import PageHeader
 class TasksPage(QWidget):
     task_selected = Signal(str)
     export_requested = Signal(str)
+    cancel_requested = Signal(str)
     new_crawl_requested = Signal()
 
     _STATUS_LABELS = (
@@ -23,6 +24,7 @@ class TasksPage(QWidget):
         ("运行中", "running"),
         ("已完成", "completed"),
         ("失败", "failed"),
+        ("已终止", "cancelled"),
         ("预算暂停", "paused_budget"),
         ("等待人工验证", "needs_verification"),
     )
@@ -80,7 +82,15 @@ class TasksPage(QWidget):
         self.export_button.setObjectName("secondaryButton")
         self.export_button.setEnabled(False)
         self.export_button.clicked.connect(lambda: self.export_requested.emit(self._selected))
-        layout.addWidget(self.export_button, 0)
+        self.cancel_button = QPushButton("终止任务", self)
+        self.cancel_button.setObjectName("secondaryButton")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(lambda: self.cancel_requested.emit(self._selected))
+        actions = QHBoxLayout()
+        actions.addWidget(self.cancel_button)
+        actions.addWidget(self.export_button)
+        actions.addStretch(1)
+        layout.addLayout(actions)
         self.refresh()
 
     def refresh(self) -> None:
@@ -90,6 +100,7 @@ class TasksPage(QWidget):
             self._selected = ""
             self.inspector.hide()
             self.export_button.setEnabled(False)
+            self.cancel_button.setEnabled(False)
         self._render()
 
     def _render(self) -> None:
@@ -122,6 +133,7 @@ class TasksPage(QWidget):
         translated = self._translated_details(details)
         self.inspector.show_details(translated)
         self.export_button.setEnabled(str(details.get("status", "")) == "completed")
+        self.cancel_button.setEnabled(str(details.get("status", "")) == "running")
         self.task_selected.emit(task_id)
 
     @staticmethod
@@ -150,4 +162,5 @@ class TasksPage(QWidget):
             "review": "建议复核",
             "failed": "失败",
             "paused_budget": "预算暂停",
+            "cancelled": "已终止",
         }.get(str(status), str(status))

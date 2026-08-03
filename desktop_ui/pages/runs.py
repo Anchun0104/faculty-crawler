@@ -294,5 +294,6 @@ class RunsPage(QWidget):
             "completed": "已完成",
             "needs_verification": "等待人工验证",
             "failed": "失败",
+            "cancelled": "已终止",
             "paused_budget": "预算暂停",
         }.get(str(status), str(status))

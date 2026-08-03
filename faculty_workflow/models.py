@@ -25,6 +25,7 @@ TASK_STATUSES = {
     "ready",
     "running",
     "paused_budget",
+    "cancelled",
     "completed",
     "failed",
 }

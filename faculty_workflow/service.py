@@ -478,9 +478,9 @@ class WorkflowService:
             self.database.update_school(school_id, status="review", failure_reason="no_person_profile_urls_found")
             return
 
-        # Personal pages often contain the only official links to laboratories,
-        # centres, or institutional research portals. Discover those links before
-        # candidate decisions so their exact-name facts can merge into the baseline.
+        # Personal pages can link to laboratories or research units containing
+        # official contact facts. Keep this bounded discovery step before final
+        # candidate decisions so exact-name evidence is not lost.
         profile_failures: dict[str, str] = {}
         for seed in list(seeds.values()):
             if self._task_cancelled(task_id):
@@ -520,7 +520,7 @@ class WorkflowService:
                         message="profile_page_started",
                     )
                     profile_page = self._fetch_with_policy(
-                        profile_url, snapshot_dir, FetchPolicy.person_profile()
+                        profile_url, snapshot_dir, FetchPolicy.person_profile(), persist_snapshot=False
                     )
             except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
                 profile_failures[profile_url] = str(exc)
@@ -731,7 +731,7 @@ class WorkflowService:
                             message="profile_page_started",
                         )
                         page = self._fetch_with_policy(
-                            profile_url, snapshot_dir, FetchPolicy.person_profile()
+                            profile_url, snapshot_dir, FetchPolicy.person_profile(), persist_snapshot=False
                         )
                 except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
                     self._save_profile_fetch_review(
@@ -770,7 +770,7 @@ class WorkflowService:
                 )
                 if cached_page is not None:
                     return cached_page
-                fetched = self._fetch_with_policy(url, snapshot_dir, FetchPolicy.person_profile())
+                fetched = self._fetch_with_policy(url, snapshot_dir, FetchPolicy.person_profile(), persist_snapshot=False)
                 email_pages.append(fetched)
                 return fetched
 
@@ -852,7 +852,7 @@ class WorkflowService:
             )
             try:
                 page = self._fetch_with_policy(
-                    hint.url, snapshot_dir, FetchPolicy.person_profile()
+                    hint.url, snapshot_dir, FetchPolicy.person_profile(), persist_snapshot=False
                 )
             except (AccessBlockedError, RobotsDeniedError, FetchError) as exc:
                 self.database.update_source(
@@ -885,6 +885,8 @@ class WorkflowService:
         url: str,
         snapshot_dir: Path,
         policy: FetchPolicy,
+        *,
+        persist_snapshot: bool = True,
     ) -> FetchedPage:
         """Use source-aware fetch settings while preserving injected fetcher compatibility."""
         try:
@@ -893,10 +895,18 @@ class WorkflowService:
                 parameter.name == "policy" or parameter.kind == inspect.Parameter.VAR_KEYWORD
                 for parameter in parameters
             )
+            supports_snapshot_flag = any(
+                parameter.name == "persist_snapshot" or parameter.kind == inspect.Parameter.VAR_KEYWORD
+                for parameter in parameters
+            )
         except (TypeError, ValueError):
             supports_policy = True
+            supports_snapshot_flag = True
         if supports_policy:
-            return self.fetcher.fetch(url, snapshot_dir, policy=policy)
+            kwargs: dict[str, Any] = {"policy": policy}
+            if supports_snapshot_flag:
+                kwargs["persist_snapshot"] = persist_snapshot
+            return self.fetcher.fetch(url, snapshot_dir, **kwargs)
         return self.fetcher.fetch(
             url, snapshot_dir, expand_directory=policy.expand_directory
         )
@@ -1115,7 +1125,7 @@ class WorkflowService:
             final_url=page.final_url,
             http_status=page.http_status,
             content_hash=page.content_hash,
-            snapshot_path=str(page.snapshot_path),
+            snapshot_path=str(page.snapshot_path or ""),
             fetched_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             failure_reason="",
             fetch_state="fetched",

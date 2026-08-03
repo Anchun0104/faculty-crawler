@@ -65,7 +65,7 @@ class FetchedPage:
     html: str
     text: str
     content_hash: str
-    snapshot_path: Path
+    snapshot_path: Path | None
     dynamic_actions: tuple[str, ...] = ()
     fetch_duration_ms: int = 0
     fetch_attempts: int = 1
@@ -118,6 +118,7 @@ class PageFetcher:
         *,
         expand_directory: bool = False,
         policy: FetchPolicy | None = None,
+        persist_snapshot: bool = True,
     ) -> FetchedPage:
         started_at = time.monotonic()
         active_policy = policy or FetchPolicy(
@@ -131,7 +132,7 @@ class PageFetcher:
         self._check_robots(url)
         self._throttle(parsed.hostname or parsed.netloc)
         if parsed.path.casefold().endswith(".pdf"):
-            return self._fetch_pdf(url, snapshot_dir, started_at=started_at)
+            return self._fetch_pdf(url, snapshot_dir, started_at=started_at, persist_snapshot=persist_snapshot)
 
         try:
             from playwright.sync_api import Error as PlaywrightError
@@ -197,12 +198,14 @@ class PageFetcher:
                 f"HTML exceeds snapshot limit ({len(raw)} bytes > {self.max_snapshot_bytes} bytes)"
             )
         digest = hashlib.sha256(raw).hexdigest()
-        snapshot_root = Path(snapshot_dir)
-        snapshot_root.mkdir(parents=True, exist_ok=True)
-        snapshot_path = snapshot_root / f"{digest}.html.gz"
-        if not snapshot_path.exists():
-            with gzip.open(snapshot_path, "wb") as handle:
-                handle.write(raw)
+        snapshot_path: Path | None = None
+        if persist_snapshot:
+            snapshot_root = Path(snapshot_dir)
+            snapshot_root.mkdir(parents=True, exist_ok=True)
+            snapshot_path = snapshot_root / f"{digest}.html.gz"
+            if not snapshot_path.exists():
+                with gzip.open(snapshot_path, "wb") as handle:
+                    handle.write(raw)
         return FetchedPage(
             requested_url=url,
             final_url=final_url,
@@ -223,6 +226,7 @@ class PageFetcher:
         snapshot_dir: str | Path,
         *,
         started_at: float | None = None,
+        persist_snapshot: bool = True,
     ) -> FetchedPage:
         request = Request(
             url,
@@ -249,11 +253,13 @@ class PageFetcher:
         except PdfDocumentError as exc:
             raise FetchError(str(exc)) from exc
         digest = hashlib.sha256(data).hexdigest()
-        snapshot_root = Path(snapshot_dir)
-        snapshot_root.mkdir(parents=True, exist_ok=True)
-        snapshot_path = snapshot_root / f"{digest}.pdf"
-        if not snapshot_path.exists():
-            snapshot_path.write_bytes(data)
+        snapshot_path: Path | None = None
+        if persist_snapshot:
+            snapshot_root = Path(snapshot_dir)
+            snapshot_root.mkdir(parents=True, exist_ok=True)
+            snapshot_path = snapshot_root / f"{digest}.pdf"
+            if not snapshot_path.exists():
+                snapshot_path.write_bytes(data)
         fallback_title = Path(urlparse(final_url).path).name or "PDF"
         return FetchedPage(
             requested_url=url,

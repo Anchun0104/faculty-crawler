@@ -114,6 +114,40 @@ class WorkflowFetcherTests(unittest.TestCase):
 
             self.assertEqual(list(Path(temp_dir).iterdir()), [])
 
+    def test_person_page_can_skip_snapshot_persistence(self) -> None:
+        class AllowAllRobots:
+            def set_url(self, url: str) -> None: pass
+            def read(self) -> None: pass
+            def can_fetch(self, user_agent: str, url: str) -> bool: return True
+
+        class Page:
+            url = "https://example.edu/people/ada"
+            def set_default_timeout(self, timeout: int) -> None: pass
+            def goto(self, url: str, **kwargs: object): return type("Response", (), {"status": 200})()
+            def wait_for_load_state(self, state: str, **kwargs: object) -> None: pass
+            def wait_for_timeout(self, timeout: int) -> None: pass
+            def content(self) -> str: return "<html><body>Ada</body></html>"
+            def title(self) -> str: return "Ada"
+
+        class Context:
+            def new_page(self) -> Page: return Page()
+            def close(self) -> None: pass
+        class Browser:
+            def new_context(self, **kwargs: object) -> Context: return Context()
+            def close(self) -> None: pass
+        class Playwright:
+            def __enter__(self): return self
+            def __exit__(self, *args: object) -> None: pass
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("playwright.sync_api.sync_playwright", return_value=Playwright()):
+                with patch.object(PageFetcher, "_launch_browser", return_value=Browser()):
+                    page = PageFetcher(min_domain_interval=0, max_attempts=1, robots_factory=AllowAllRobots).fetch(
+                        "https://example.edu/people/ada", temp_dir, persist_snapshot=False
+                    )
+            self.assertIsNone(page.snapshot_path)
+            self.assertEqual(list(Path(temp_dir).iterdir()), [])
+
     def test_pdf_download_extracts_text_and_never_starts_browser(self) -> None:
         server = ThreadingHTTPServer(("127.0.0.1", 0), _FixtureHandler)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

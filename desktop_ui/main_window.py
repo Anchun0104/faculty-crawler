@@ -20,6 +20,11 @@ from PySide6.QtWidgets import (
 
 from .icons import NAVIGATION_ITEMS, navigation_icon
 from .pages.settings import SettingsPage
+from .pages.overview import OverviewPage
+from .pages.tasks import TasksPage
+from .pages.verification import VerificationPage
+from .pages.runs import RunsPage
+from .pages.sessions import SessionsPage
 from .tokens import LIGHT_TOKENS
 from .widgets.status_badge import BackgroundStatus, StatusBadge
 
@@ -133,9 +138,20 @@ class MainWindow(QMainWindow):
         return content
 
     def _build_page(self, page_id: str, label: str) -> QWidget:
+        page_types = {
+            "overview": OverviewPage,
+            "tasks": TasksPage,
+            "verification": VerificationPage,
+            "runs": RunsPage,
+            "sessions": SessionsPage,
+        }
         if page_id == "settings":
             self.settings_page = SettingsPage(self.facade, self.page_stack)
             return self.settings_page
+        if page_id in page_types:
+            page = page_types[page_id](self.facade, self.page_stack)
+            setattr(self, f"{page_id}_page", page)
+            return page
         page = QWidget(self.page_stack)
         page_layout = QVBoxLayout(page)
         page_layout.setContentsMargins(0, 0, 0, 0)

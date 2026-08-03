@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .ai_settings import AiSettingsPage
+from .storage import StoragePage
 
 
 class SettingsPage(QWidget):
@@ -87,6 +88,9 @@ class SettingsPage(QWidget):
                 self.ai_scroll.setFrameShape(QFrame.NoFrame)
                 self.ai_scroll.setWidget(self.ai_page)
                 page = self.ai_scroll
+            elif section_id == "storage":
+                self.storage_page = StoragePage(self.facade, self.section_stack)
+                page = self.storage_page
             else:
                 page = self._placeholder_page(label)
             self._section_indexes[section_id] = self.section_stack.addWidget(page)
@@ -115,6 +119,8 @@ class SettingsPage(QWidget):
         self._section_buttons[section_id].setChecked(True)
         if section_id == "ai":
             self.ai_page.refresh()
+        elif section_id == "storage":
+            self.storage_page.refresh()
 
     def current_section(self) -> str:
         index = self.section_stack.currentIndex()

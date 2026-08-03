@@ -149,6 +149,56 @@ class WorkflowFacade:
             for row in rows
         )
 
+    def task_rows(self, *, limit: int = 200) -> tuple[dict[str, object], ...]:
+        """Safe task list for the desktop UI; filesystem and SQLite stay behind the facade."""
+        return tuple(self._task_row(row) for row in self.database.list_tasks(limit=limit))
+
+    def task_detail(self, task_id: str) -> dict[str, object]:
+        task = self.database.summary(task_id)
+        return {
+            "id": str(task["id"]), "discipline": str(task["discipline"]),
+            "status": str(task["status"]), "output_dir": str(task["output_dir"]),
+            "created_at": str(task["created_at"]), "updated_at": str(task["updated_at"]),
+            "schools": sum(int(value) for value in task["schools"].values()),
+            "records": sum(int(value) for value in task["candidates"].values()),
+            "spent_usd": float(task["spent_usd"]), "budget_usd": float(task["budget_usd"]),
+            "warning": str(task["warning"]), "error": str(task["error"]),
+        }
+
+    def verification_rows(self, *, limit: int = 200) -> tuple[dict[str, object], ...]:
+        return tuple({
+            "id": str(row["id"]), "task_id": str(row["task_id"]), "school": str(row["school"]),
+            "url": str(row["url"]), "reason": str(row["reason"]), "status": str(row["status"]),
+        } for row in self.database.list_pending_access_reviews(limit=limit))
+
+    def resolve_verification(self, review_id: str, *, retry: bool) -> None:
+        self.database.resolve_access_review(int(review_id), retry=retry)
+
+    def session_rows(self) -> tuple[dict[str, object], ...]:
+        store = getattr(getattr(self.service, "fetcher", None), "session_store", None)
+        if store is None or not hasattr(store, "list"):
+            return ()
+        return tuple({"hostname": str(item.hostname), "saved_at": str(item.saved_at),
+                      "expires_at": str(item.expires_at)} for item in store.list())
+
+    def clear_session(self, hostname: str) -> None:
+        store = getattr(getattr(self.service, "fetcher", None), "session_store", None)
+        if store is None or not hasattr(store, "clear"):
+            raise RuntimeError("Site session storage is unavailable")
+        store.clear(hostname)
+
+    def storage_summary(self) -> dict[str, object]:
+        """Minimal, display-safe storage status. Detailed cleanup remains an explicit command."""
+        from crawler.retention import RetentionService
+        usage = RetentionService(self.app_paths).usage()
+        return {"bytes": usage.bytes, "files": usage.files}
+
+    @staticmethod
+    def _task_row(row: object) -> dict[str, object]:
+        return {"id": str(row["id"]), "discipline": str(row["discipline"]),
+                "status": str(row["status"]), "created_at": str(row["created_at"]),
+                "updated_at": str(row["updated_at"]), "output_dir": str(row["output_dir"])}
+
     def _ai_settings_view(self, configuration: ProviderConfiguration) -> AiSettingsView:
         return AiSettingsView(
             enabled=configuration.enabled,

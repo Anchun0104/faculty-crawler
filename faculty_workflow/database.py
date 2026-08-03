@@ -334,6 +334,14 @@ class WorkflowDatabase:
             raise KeyError(f"Unknown task: {task_id}")
         return row
 
+    def list_tasks(self, *, limit: int = 200) -> list[sqlite3.Row]:
+        """Return recent tasks for operator-facing read-only summaries."""
+        with closing(self.connect()) as connection:
+            return list(connection.execute(
+                "SELECT * FROM tasks ORDER BY updated_at DESC, created_at DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall())
+
     def get_policy(self, task_id: str) -> DisciplinePolicy:
         return DisciplinePolicy.from_json(self.get_task(task_id)["policy_json"])
 
@@ -499,6 +507,16 @@ class WorkflowDatabase:
         query += " ORDER BY r.updated_at DESC, r.id DESC"
         with closing(self.connect()) as connection:
             return list(connection.execute(query, params).fetchall())
+
+    def list_pending_access_reviews(self, *, limit: int = 200) -> list[sqlite3.Row]:
+        """List actionable manual-review rows without exposing browser state."""
+        with closing(self.connect()) as connection:
+            return list(connection.execute(
+                """SELECT r.*, s.name AS school FROM access_reviews r
+                   JOIN schools s ON s.id = r.school_id
+                   WHERE r.status = 'pending' ORDER BY r.updated_at DESC, r.id DESC LIMIT ?""",
+                (max(1, int(limit)),),
+            ).fetchall())
 
     def get_access_review(self, review_id: int) -> sqlite3.Row:
         with closing(self.connect()) as connection:

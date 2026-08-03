@@ -24,3 +24,7 @@ class InfoBar(QFrame):
 
     def message(self) -> str:
         return self._label.text()
+
+    def text(self) -> str:
+        """Qt-label compatible read accessor used by lightweight page tests."""
+        return self.message()

@@ -138,7 +138,15 @@ class OverviewPage(QWidget):
         completed = sum(row.get("status") == "completed" for row in rows)
         self.success_rate.setText(f"{round(completed / len(rows) * 100) if rows else 0}%")
         self.table.set_rows(
-            (str(row["id"]), (row["id"], row.get("discipline", ""), self._status_text(row.get("status", "")), row.get("updated_at", "")))
+            (
+                str(row["id"]),
+                (
+                    row.get("name", row.get("run_name", row["id"])),
+                    row.get("discipline", ""),
+                    self._status_text(row.get("status", "")),
+                    row.get("updated_at", ""),
+                ),
+            )
             for row in rows
         )
         self.table.setVisible(bool(rows))
@@ -151,7 +159,7 @@ class OverviewPage(QWidget):
             self.current_run_progress.clear()
             self.view_task_button.setEnabled(False)
         else:
-            self.current_run_title.setText(str(current.get("id", "")))
+            self.current_run_title.setText(str(current.get("name", current.get("run_name", current.get("id", "")))))
             self.current_run_detail.setText(f"{current.get('discipline', '')} · 正在采集")
             self.current_run_progress.setText("运行中")
             self.view_task_button.setEnabled(True)

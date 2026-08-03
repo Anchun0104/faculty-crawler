@@ -102,7 +102,15 @@ class TasksPage(QWidget):
             and (not query or query in " ".join(map(str, row.values())).casefold())
         ]
         self.table.set_rows(
-            (str(row["id"]), (row["id"], row.get("discipline", ""), self._status_text(row.get("status", "")), row.get("updated_at", "")))
+            (
+                str(row["id"]),
+                (
+                    row.get("name", row.get("run_name", row["id"])),
+                    row.get("discipline", ""),
+                    self._status_text(row.get("status", "")),
+                    row.get("updated_at", ""),
+                ),
+            )
             for row in rows
         )
         self.table.setVisible(bool(rows))

@@ -2,7 +2,7 @@
 
 本文件是功能变更的完整索引。版本状态、下载资产与 Git 标签以对应的 GitHub Release 为准。
 
-## 2.2.0（本地发布候选）
+## 2.2.0（已发布）
 
 ### 新增与改进
 
@@ -20,8 +20,10 @@
 
 ### 发布状态
 
-- 当前为本地发布候选，尚未创建 `v2.2.0` Git 标签或 GitHub Release。
-- 完整候选说明见 [RELEASE_NOTES_2.2.0.md](RELEASE_NOTES_2.2.0.md)。正式发布后补充安装包、源码包和 SHA-256 资产链接。
+- 标签：[v2.2.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.2.0)。该 Release 提供 Windows 安装包、源码 ZIP、两个 SHA-256 校验文件和发布说明。
+- 安装器 SHA-256：`6D4AAD53698BCF4C65061CE9A4FAB6BBFAB7CA1231DC10F1DAD4BB6A2EB1F5F7`。
+- 源码 ZIP SHA-256：`A94F3C6FECC43BD66C1DBD85595AC14FBDDF2B6E459DD6CFA92285A28C4754E3`。
+- 完整发布说明见 [RELEASE_NOTES_2.2.0.md](RELEASE_NOTES_2.2.0.md)。
 
 ## 2.1.0（已发布）
 

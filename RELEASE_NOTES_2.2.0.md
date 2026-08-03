@@ -1,6 +1,6 @@
 # Faculty Crawler 2.2.0 发布说明
 
-这是 Faculty Crawler 2.2.0 的本地发布候选说明。正式创建 `v2.2.0` GitHub Release 后，再补充公开下载地址和最终 SHA-256；本地构建产物的校验值以本次构建输出为准。
+这是 Faculty Crawler 2.2.0 的正式发布说明，对应 [v2.2.0 GitHub Release](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.2.0)。Release 附带 Windows 安装包、源码 ZIP、两个 SHA-256 校验文件和本说明。
 
 完整版本历史请见 [CHANGELOG.md](CHANGELOG.md)。
 
@@ -20,11 +20,11 @@
 
 ## 发布验证
 
-- 已通过完整 Python 回归测试：`683 passed, 1 skipped, 190 subtests passed`。
+- 已通过完整 Python 回归测试：`684 passed, 1 skipped, 190 subtests passed`。
 - 已完成真实 PySide6 fixture 窗口验收，覆盖 Overview、Tasks、Manual verification、Run history、Site sessions、Settings/AI、Storage 以及 New Crawl 的 URL/XLSX 模式和 20 条 URL 批量状态。
-- 源码 ZIP 使用 `build_release.py` 构建，安装器使用 `build_installer.ps1` 和 D 盘 Inno Setup 6 编译器构建；发布前必须核对构建输出中的提交号、文件名和 SHA-256。
+- 源码 ZIP 使用 `build_release.py` 构建，安装器使用 `build_installer.ps1` 和 D 盘 Inno Setup 6 编译器构建；Release 资产已按文件名和 SHA-256 完成核对。
 
-## 本地构建产物
+## Release 资产
 
 ```text
 dist/faculty-crawler-windows.zip
@@ -33,13 +33,19 @@ dist/installer/FacultyCrawler-Setup-2.2.0.exe
 dist/installer/FacultyCrawler-Setup-2.2.0.sha256.txt
 ```
 
-本次本地构建的安装器 SHA-256：
+源码 ZIP SHA-256：
+
+```text
+A94F3C6FECC43BD66C1DBD85595AC14FBDDF2B6E459DD6CFA92285A28C4754E3
+```
+
+安装器 SHA-256：
 
 ```text
 6D4AAD53698BCF4C65061CE9A4FAB6BBFAB7CA1231DC10F1DAD4BB6A2EB1F5F7
 ```
 
-本地构建完成后，可用以下命令计算校验值：
+如需在本地重新计算校验值，可用以下命令：
 
 ```powershell
 Get-FileHash .\dist\faculty-crawler-windows.zip -Algorithm SHA256

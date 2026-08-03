@@ -218,7 +218,11 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertIn("requirements-build.txt", readme)
         self.assertIn("build_installer.ps1", readme)
         self.assertIn(
-            "releases/download/v2.1.0/FacultyCrawler-Setup-2.1.0.exe",
+            "releases/download/v2.2.0/FacultyCrawler-Setup-2.2.0.exe",
+            readme,
+        )
+        self.assertIn(
+            "releases/tag/v2.2.0",
             readme,
         )
         self.assertIn(

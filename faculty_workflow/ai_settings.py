@@ -100,9 +100,9 @@ class AiSettingsStore:
             json.dumps(asdict(configuration), ensure_ascii=False, sort_keys=True),
             encoding="utf-8",
         )
-        if not configuration.enabled:
-            self.keys.delete()
-        elif api_key is not None:
+        # A metadata-only save must not erase an encrypted key.  Key deletion
+        # is always explicit through ``delete_key`` (or an explicit empty key).
+        if api_key is not None:
             self.keys.save(api_key)
 
     def delete_key(self) -> None:

@@ -10,15 +10,28 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from desktop_ui.main_window import MainWindow
+from desktop_ui.models import AiSettingsView, AiUsageView
+from desktop_ui.pages.settings import SettingsPage
 from desktop_ui.widgets.status_badge import BackgroundStatus
 
 
 APP = QApplication.instance() or QApplication([])
 
 
+class ShellFacade:
+    def ai_settings(self) -> AiSettingsView:
+        return AiSettingsView(False, "local", "", "", False)
+
+    def ai_usage(self) -> AiUsageView:
+        return AiUsageView(0, 0, 0, 0, 0, 0.0)
+
+    def ai_usage_details(self) -> tuple[object, ...]:
+        return ()
+
+
 class DesktopUiShellTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.window = MainWindow(facade=object())
+        self.window = MainWindow(facade=ShellFacade())
         self.window.resize(1440, 900)
         self.window.show()
         QTest.qWaitForWindowExposed(self.window)
@@ -43,6 +56,23 @@ class DesktopUiShellTests(unittest.TestCase):
         QTest.keyClick(self.window, Qt.Key_Comma, Qt.ControlModifier)
 
         self.assertEqual(self.window.current_page_id(), "settings")
+
+    def test_settings_navigation_uses_the_real_ai_settings_page(self) -> None:
+        self.window.navigate("settings")
+        self.assertIsInstance(self.window.settings_page, SettingsPage)
+
+        self.window.settings_page.navigate("ai")
+
+        self.assertEqual(self.window.settings_page.current_section(), "ai")
+        self.assertEqual(self.window.settings_page.ai_page.key_status.text(), "未配置")
+
+    def test_ai_settings_content_scrolls_at_supported_minimum_size(self) -> None:
+        self.window.resize(1180, 720)
+        self.window.navigate("settings")
+        self.window.settings_page.navigate("ai")
+        QTest.qWait(10)
+
+        self.assertGreater(self.window.settings_page.ai_scroll.verticalScrollBar().maximum(), 0)
 
     def test_navigation_can_collapse_and_expand(self) -> None:
         self.window.set_navigation_collapsed(True)

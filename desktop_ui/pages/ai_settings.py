@@ -82,6 +82,9 @@ class AiSettingsPage(QWidget):
         self.facade = facade
         self._connection_thread: _ConnectionTestThread | None = None
         self.setAccessibleName("Translation and AI settings")
+        # The containing settings scroll area keeps this full page reachable at
+        # the approved 1180 x 720 minimum instead of compressing its controls.
+        self.setMinimumHeight(760)
         self._build()
         self.key_dialog = ApiKeyDialog(self)
         self.key_dialog.key_submitted.connect(self._replace_key)
@@ -294,7 +297,9 @@ class AiSettingsPage(QWidget):
         for field in (self.provider_combo, self.base_url_edit, self.model_edit):
             field.setEnabled(enabled)
         self.replace_key_button.setEnabled(enabled)
-        self.delete_key_button.setEnabled(enabled and self.key_status.text() == "已配置")
+        # A retained encrypted key may be deliberately kept while AI is
+        # disabled.  It must remain explicitly deletable in that state.
+        self.delete_key_button.setEnabled(self.key_status.text() == "已配置")
 
     def _apply_provider_defaults(self) -> None:
         if self.provider_combo.currentData() == "deepseek" and not self.base_url_edit.text().strip():
@@ -354,6 +359,12 @@ class AiSettingsPage(QWidget):
     def test_connection(self) -> None:
         if self._connection_thread is not None:
             return
+        if not self.enabled_checkbox.isChecked():
+            self.info_bar.set_message("请先启用外部 AI，再测试连接。")
+            return
+        if self.key_status.text() != "已配置":
+            self.info_bar.set_message("请先配置 API Key，再测试连接。")
+            return
         if not self.save_settings():
             return
         self.connection_status.setText("正在测试…")
@@ -373,4 +384,3 @@ class AiSettingsPage(QWidget):
         else:
             self.connection_status.setText("测试失败")
             self.info_bar.set_message("连接测试失败。请检查服务商、Base URL、模型和 API Key。")
-

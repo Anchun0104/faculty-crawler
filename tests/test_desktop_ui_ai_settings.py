@@ -59,10 +59,10 @@ class AiSettingsFacade:
     def delete_ai_key(self) -> AiSettingsView:
         self.deleted = True
         self.settings = AiSettingsView(
-            self.settings.enabled,
-            self.settings.provider,
-            self.settings.base_url,
-            self.settings.model,
+            False,
+            "local",
+            "",
+            "",
             False,
         )
         return self.settings
@@ -135,7 +135,10 @@ class AiSettingsPageTests(unittest.TestCase):
         self.page.delete_key()
 
         self.assertTrue(self.facade.deleted)
+        self.assertFalse(self.facade.settings.enabled)
+        self.assertEqual(self.facade.settings.provider, "local")
         self.assertEqual(self.page.key_status.text(), "未配置")
+        self.assertFalse(self.page.enabled_checkbox.isChecked())
 
     def test_connection_test_is_non_blocking_and_updates_status(self) -> None:
         self.page.test_connection()

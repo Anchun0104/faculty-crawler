@@ -93,6 +93,17 @@ class WorkflowFacadeTests(unittest.TestCase):
         self.assertEqual(configuration.model, "deepseek-v4-pro")
         self.assertEqual(key, "secret-key")
 
+    def test_delete_ai_key_disables_ai_and_removes_only_the_explicit_key(self) -> None:
+        self.settings.save(ProviderConfiguration.deepseek(), "secret-key")
+
+        view = self.facade.delete_ai_key()
+        configuration, key = self.settings.load()
+
+        self.assertFalse(view.enabled)
+        self.assertFalse(view.key_configured)
+        self.assertEqual(configuration, ProviderConfiguration.local())
+        self.assertEqual(key, "")
+
 
 if __name__ == "__main__":
     unittest.main()

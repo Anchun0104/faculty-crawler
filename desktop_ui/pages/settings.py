@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QScrollArea,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -79,7 +80,13 @@ class SettingsPage(QWidget):
         for section_id, label in self._SECTIONS:
             if section_id == "ai":
                 self.ai_page = AiSettingsPage(self.facade, self.section_stack)
-                page = self.ai_page
+                self.ai_scroll = QScrollArea(self.section_stack)
+                self.ai_scroll.setObjectName("aiSettingsScrollArea")
+                self.ai_scroll.setAccessibleName("Scrollable AI settings")
+                self.ai_scroll.setWidgetResizable(True)
+                self.ai_scroll.setFrameShape(QFrame.NoFrame)
+                self.ai_scroll.setWidget(self.ai_page)
+                page = self.ai_scroll
             else:
                 page = self._placeholder_page(label)
             self._section_indexes[section_id] = self.section_stack.addWidget(page)

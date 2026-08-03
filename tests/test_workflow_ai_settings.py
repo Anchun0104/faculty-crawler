@@ -86,6 +86,19 @@ class AiSettingsTests(unittest.TestCase):
             self.assertEqual(key, "")
             self.assertFalse((root / "ai-key.bin").exists())
 
+    def test_metadata_only_disable_preserves_an_encrypted_key_until_explicit_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            store = AiSettingsStore(root, protector=ReversibleProtector())
+            store.save(ProviderConfiguration.deepseek(), "secret-key")
+
+            store.save(ProviderConfiguration.local(), None)
+
+            configuration, key = store.load()
+            self.assertFalse(configuration.enabled)
+            self.assertEqual(key, "secret-key")
+            self.assertTrue(store.key_configured())
+
 
 class ApiKeyStoreTests(unittest.TestCase):
     def test_empty_key_removes_encrypted_payload(self) -> None:

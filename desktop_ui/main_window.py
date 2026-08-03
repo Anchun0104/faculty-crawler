@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import NAVIGATION_ITEMS, navigation_icon
+from .pages.settings import SettingsPage
 from .tokens import LIGHT_TOKENS
 from .widgets.status_badge import BackgroundStatus, StatusBadge
 
@@ -124,18 +125,25 @@ class MainWindow(QMainWindow):
         self.page_stack = QStackedWidget(content)
         self.page_stack.setAccessibleName("Main content")
         for item in NAVIGATION_ITEMS:
-            page = QWidget(self.page_stack)
+            page = self._build_page(item.page_id, item.label)
             page.setObjectName(f"page_{item.page_id}")
             page.setAccessibleName(f"{item.label} page")
-            page_layout = QVBoxLayout(page)
-            page_layout.setContentsMargins(0, 0, 0, 0)
-            heading = QLabel(item.label, page)
-            heading.setObjectName("pageHeading")
-            page_layout.addWidget(heading)
-            page_layout.addStretch(1)
             self._page_index[item.page_id] = self.page_stack.addWidget(page)
         layout.addWidget(self.page_stack, 1)
         return content
+
+    def _build_page(self, page_id: str, label: str) -> QWidget:
+        if page_id == "settings":
+            self.settings_page = SettingsPage(self.facade, self.page_stack)
+            return self.settings_page
+        page = QWidget(self.page_stack)
+        page_layout = QVBoxLayout(page)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        heading = QLabel(label, page)
+        heading.setObjectName("pageHeading")
+        page_layout.addWidget(heading)
+        page_layout.addStretch(1)
+        return page
 
     def page_ids(self) -> tuple[str, ...]:
         return self._PAGE_IDS

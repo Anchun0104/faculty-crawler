@@ -100,7 +100,11 @@ class WorkflowFacade:
         return self._ai_settings_view(configuration)
 
     def delete_ai_key(self) -> AiSettingsView:
-        """Remove the encrypted key without exposing its plaintext to the UI."""
+        """Explicitly remove the key and return to a safe local-only state."""
+        # Disable the provider before deleting its credential.  This prevents a
+        # saved-but-unconfigured provider state that would fail when a task is
+        # started, while keeping plaintext entirely inside the settings layer.
+        self.ai_settings_store.save(ProviderConfiguration.local(), None)
         self.ai_settings_store.delete_key()
         return self.ai_settings()
 

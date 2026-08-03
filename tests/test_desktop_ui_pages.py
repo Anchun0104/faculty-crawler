@@ -79,6 +79,19 @@ class DesktopPageTests(unittest.TestCase):
         self.assertIn("Stanford Linguistics", page.current_run_progress.text())
         self.assertIn("linguistics.stanford.edu", page.current_run_progress.text())
 
+    def test_overview_explains_ready_task_is_waiting_to_start(self):
+        from desktop_ui.pages.overview import OverviewPage
+
+        facade = FakeFacade()
+        facade.task_rows = lambda **_kwargs: (
+            {"id": "task-1", "discipline": "Linguistics", "status": "ready", "name": "Stanford", "updated_at": "now"},
+        )
+
+        page = OverviewPage(facade)
+
+        self.assertIn("等待后台启动", page.current_run_detail.text())
+        self.assertIn("准备运行", page.current_run_progress.text())
+
     def test_work_pages_use_chinese_headers_and_approved_composition(self):
         from desktop_ui.pages.overview import OverviewPage
         from desktop_ui.pages.tasks import TasksPage

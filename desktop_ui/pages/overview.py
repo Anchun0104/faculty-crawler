@@ -158,6 +158,8 @@ class OverviewPage(QWidget):
 
         current = next((row for row in rows if row.get("status") == "running"), None)
         if current is None:
+            current = next((row for row in rows if row.get("status") == "ready"), None)
+        if current is None:
             self._current_task_id = ""
             self.current_run_title.setText("暂无运行中的任务")
             self.current_run_detail.setText("后台服务空闲")
@@ -166,8 +168,12 @@ class OverviewPage(QWidget):
         else:
             self._current_task_id = str(current.get("id", ""))
             self.current_run_title.setText(str(current.get("name", current.get("run_name", current.get("id", "")))))
-            self.current_run_detail.setText(f"{current.get('discipline', '')} · 正在采集")
-            self.current_run_progress.setText("运行中")
+            if current.get("status") == "ready":
+                self.current_run_detail.setText(f"{current.get('discipline', '')} · 等待后台启动")
+                self.current_run_progress.setText("准备运行")
+            else:
+                self.current_run_detail.setText(f"{current.get('discipline', '')} · 正在采集")
+                self.current_run_progress.setText("运行中")
             self.view_task_button.setEnabled(True)
 
     def set_live_progress(self, event: dict[str, object]) -> None:

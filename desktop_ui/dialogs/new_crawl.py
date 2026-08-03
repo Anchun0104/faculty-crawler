@@ -93,6 +93,9 @@ class LineNumberEditor(QPlainTextEdit):
 class NewCrawlDialog(QDialog):
     """Create a crawl from newline-separated URLs or a validated XLSX source."""
 
+    _DEFAULT_DISCIPLINE_LABEL = "综合教师"
+    _DEFAULT_DISCIPLINE_VALUE = "General Faculty"
+
     requested = Signal(object)
     xlsx_requested = Signal(str, object)
 
@@ -136,12 +139,18 @@ class NewCrawlDialog(QDialog):
         mode_layout = QHBoxLayout()
         self.url_mode_button = QToolButton(self)
         self.url_mode_button.setText("直接粘贴 URL")
+        self.url_mode_button.setObjectName("urlModeCard")
+        self.url_mode_button.setAccessibleName("直接粘贴 URL")
+        self.url_mode_button.setToolTip("采集一个公开教师目录页面")
         self.url_mode_button.setCheckable(True)
         self.url_mode_button.setChecked(True)
         self.url_mode_button.clicked.connect(self.select_url_mode)
         mode_layout.addWidget(self.url_mode_button)
         self.xlsx_mode_button = QToolButton(self)
         self.xlsx_mode_button.setText("导入 XLSX")
+        self.xlsx_mode_button.setObjectName("xlsxModeCard")
+        self.xlsx_mode_button.setAccessibleName("导入 XLSX")
+        self.xlsx_mode_button.setToolTip("导入包含多个目录 URL 的工作簿")
         self.xlsx_mode_button.setCheckable(True)
         self.xlsx_mode_button.clicked.connect(self.select_xlsx_mode)
         mode_layout.addWidget(self.xlsx_mode_button)
@@ -156,21 +165,26 @@ class NewCrawlDialog(QDialog):
         details = QFormLayout()
         self.school_name_edit = QLineEdit(self)
         self.school_name_edit.setPlaceholderText("仅适用于单个 URL")
+        self.school_name_edit.setAccessibleName("学校名称（可选）")
         self.school_name_edit.textChanged.connect(self._schedule_url_validation)
         details.addRow("学校名称（可选）", self.school_name_edit)
-        self.discipline_edit = QLineEdit("General Faculty", self)
+        self.discipline_edit = QLineEdit(self._DEFAULT_DISCIPLINE_LABEL, self)
+        self.discipline_edit.setAccessibleName("学科")
         details.addRow("学科", self.discipline_edit)
         self.output_dir_edit = QLineEdit(str(default_output_dir), self)
+        self.output_dir_edit.setAccessibleName("输出目录")
         self.output_dir_edit.textChanged.connect(self._refresh_batch_confirmation)
         output_row = QWidget(self)
         output_layout = QHBoxLayout(output_row)
         output_layout.setContentsMargins(0, 0, 0, 0)
         output_layout.addWidget(self.output_dir_edit, 1)
         picker = QPushButton("选择", output_row)
+        picker.setAccessibleName("选择输出目录")
         picker.clicked.connect(self._pick_output_dir)
         output_layout.addWidget(picker)
         details.addRow("输出目录", output_row)
         self.use_ai_checkbox = QCheckBox("仅对已获取页面使用已配置 AI", self)
+        self.use_ai_checkbox.setAccessibleName("仅对已获取页面使用已配置 AI")
         details.addRow("AI", self.use_ai_checkbox)
         layout.addLayout(details)
 
@@ -209,6 +223,7 @@ class NewCrawlDialog(QDialog):
         actions.addWidget(cancel)
         self.start_button = QPushButton(self)
         self.start_button.setObjectName("primaryButton")
+        self.start_button.setAccessibleName("开始批次")
         self.start_button.clicked.connect(self._start)
         actions.addWidget(self.start_button)
         layout.addLayout(actions)
@@ -218,9 +233,10 @@ class NewCrawlDialog(QDialog):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         label = QLabel("目录 URL（每行一个）", page)
+        label.setObjectName("fieldLabel")
         layout.addWidget(label)
         self.url_editor = LineNumberEditor(page)
-        self.url_editor.setAccessibleName("Directory URLs, one per line")
+        self.url_editor.setAccessibleName("目录 URL，每行一个")
         self.url_editor.setPlaceholderText("https://university.edu/faculty\nhttps://school.edu/people")
         self.url_editor.setMinimumHeight(180)
         self.url_editor.textChanged.connect(self._schedule_url_validation)
@@ -235,9 +251,10 @@ class NewCrawlDialog(QDialog):
         row = QHBoxLayout()
         self.xlsx_path_edit = QLineEdit(page)
         self.xlsx_path_edit.setReadOnly(True)
-        self.xlsx_path_edit.setAccessibleName("School XLSX path")
+        self.xlsx_path_edit.setAccessibleName("学校 XLSX 路径")
         row.addWidget(self.xlsx_path_edit, 1)
         picker = QPushButton("选择 XLSX", page)
+        picker.setAccessibleName("选择 XLSX 文件")
         picker.clicked.connect(self._pick_xlsx_file)
         row.addWidget(picker)
         layout.addLayout(row)
@@ -365,10 +382,15 @@ class NewCrawlDialog(QDialog):
             urls=self._prepared_urls.valid_urls,
             output_dir=Path(self.output_dir_edit.text().strip()),
             school_name=self.school_name_edit.text().strip(),
-            discipline=self.discipline_edit.text().strip() or "General Faculty",
+            discipline=self._discipline_value(),
             use_ai=self.use_ai_checkbox.isChecked(),
             budget_usd=self._default_budget_usd,
         )
+
+    def _discipline_value(self) -> str:
+        """Keep the existing workflow value while presenting a Chinese default."""
+        value = self.discipline_edit.text().strip()
+        return self._DEFAULT_DISCIPLINE_VALUE if value == self._DEFAULT_DISCIPLINE_LABEL or not value else value
 
     def _start(self) -> None:
         if self._mode == "urls":

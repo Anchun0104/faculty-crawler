@@ -215,6 +215,15 @@ class NewCrawlDialogTests(unittest.TestCase):
         self.assertIn("robots", self.dialog.compliance_info.message())
         self.assertFalse(self.dialog.compliance_info.isHidden())
 
+    def test_new_crawl_uses_chinese_source_cards_and_accessible_fields(self) -> None:
+        self.assertEqual(self.dialog.windowTitle(), "新建采集")
+        self.assertEqual(self.dialog.url_mode_button.text(), "直接粘贴 URL")
+        self.assertEqual(self.dialog.xlsx_mode_button.text(), "导入 XLSX")
+        self.assertEqual(self.dialog.url_mode_button.accessibleName(), "直接粘贴 URL")
+        self.assertEqual(self.dialog.url_editor.accessibleName(), "目录 URL，每行一个")
+        self.assertEqual(self.dialog.discipline_edit.text(), "综合教师")
+        self.assertEqual(self.dialog.start_button.accessibleName(), "开始批次")
+
     def test_facade_validates_xlsx_with_the_existing_school_importer(self) -> None:
         """A second spreadsheet parser could accept files the workflow later rejects."""
         with tempfile.TemporaryDirectory() as directory:

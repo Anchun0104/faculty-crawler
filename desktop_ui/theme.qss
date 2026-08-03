@@ -171,3 +171,22 @@ QScrollBar::handle:horizontal { background: #C5D0DB; border-radius: 5px; min-wid
 #settingsNavButton:checked { background: @PRIMARY_SOFT@; border-color: #C8DFF2; color: @PRIMARY@; font-weight: 600; }
 #storageUsageBar { min-height: 10px; max-height: 10px; border: 0; border-radius: 5px; background: #E9EDF2; }
 #storageUsageBar::chunk { background: @PRIMARY@; border-radius: 5px; }
+QToolButton#urlModeCard,
+QToolButton#xlsxModeCard {
+    background: @SURFACE_PRIMARY@;
+    border: 1px solid @BORDER_DEFAULT@;
+    border-radius: 10px;
+    color: @TEXT_PRIMARY@;
+    min-height: 56px;
+    padding: 0 16px;
+    text-align: left;
+}
+QToolButton#urlModeCard:hover,
+QToolButton#xlsxModeCard:hover { background: @SURFACE_HOVER@; }
+QToolButton#urlModeCard:checked,
+QToolButton#xlsxModeCard:checked { background: @PRIMARY_SOFT@; border: 2px solid @PRIMARY@; color: @TEXT_PRIMARY@; font-weight: 600; }
+#dialogTitle { color: @TEXT_PRIMARY@; font-size: 22px; font-weight: 650; }
+#sourceSummary { color: @TEXT_PRIMARY@; font-weight: 600; }
+#sourceValidation { color: @DANGER@; }
+#batchConfirmation { color: @TEXT_SECONDARY@; }
+#fieldLabel { color: @TEXT_SECONDARY@; font-size: 12px; font-weight: 600; }

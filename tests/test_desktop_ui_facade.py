@@ -66,6 +66,26 @@ class WorkflowFacadeTests(unittest.TestCase):
         self.assertEqual(result.invalid_lines, ((3, "not-a-url"),))
         self.assertFalse(result.can_start)
 
+    def test_prepare_urls_extracts_multiple_urls_from_spreadsheet_style_paste(self) -> None:
+        result = self.facade.prepare_urls(
+            "Stanford\thttps://linguistics.stanford.edu/people/faculty, https://art.stanford.edu/people/faculty\n"
+            "https://linguistics.stanford.edu/people/faculty；https://cs.stanford.edu/people/faculty"
+        )
+
+        self.assertEqual(
+            result.valid_urls,
+            (
+                "https://linguistics.stanford.edu/people/faculty",
+                "https://art.stanford.edu/people/faculty",
+                "https://cs.stanford.edu/people/faculty",
+            ),
+        )
+        self.assertEqual(
+            result.duplicate_lines,
+            ((2, "https://linguistics.stanford.edu/people/faculty"),),
+        )
+        self.assertEqual(result.invalid_lines, ())
+
     def test_ai_view_never_returns_plaintext_key(self) -> None:
         self.settings.save(ProviderConfiguration.deepseek(), "secret-key")
 

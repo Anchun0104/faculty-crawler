@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING
 
 from crawler.app_paths import AppPaths
@@ -59,17 +60,18 @@ class WorkflowFacade:
         invalid_lines: list[tuple[int, str]] = []
         known_urls: set[str] = set()
         for line_number, line in enumerate(raw.splitlines(), start=1):
-            value = line.strip()
-            if not value:
+            values = re.findall(r"https?://[^\s,，;；]+", line)
+            if not values and not line.strip():
                 continue
-            normalized = normalize_url(value)
-            if not normalized:
-                invalid_lines.append((line_number, value))
-            elif normalized in known_urls:
-                duplicate_lines.append((line_number, normalized))
-            else:
-                known_urls.add(normalized)
-                valid_urls.append(normalized)
+            for value in values or [line.strip()]:
+                normalized = normalize_url(value.rstrip(")]},，;；"))
+                if not normalized:
+                    invalid_lines.append((line_number, value))
+                elif normalized in known_urls:
+                    duplicate_lines.append((line_number, normalized))
+                else:
+                    known_urls.add(normalized)
+                    valid_urls.append(normalized)
         return UrlPreparation(tuple(valid_urls), tuple(duplicate_lines), tuple(invalid_lines))
 
     def create_direct_tasks(self, request: NewCrawlRequest) -> str:

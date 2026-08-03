@@ -264,7 +264,7 @@ class MainWindow(QMainWindow):
         self._settings.setValue("desktop/default_budget_usd", self._default_budget_usd)
 
     def _start_direct_batch(self, request) -> None:
-        self._submit(lambda context: self._create_and_run_direct(request, context))
+        self._submit(lambda: self._create_direct_batch(request))
 
     def _start_xlsx_batch(self, schools: tuple[object, ...], request) -> None:
         self._submit(lambda context: self._create_and_run_xlsx(schools, request, context))
@@ -272,9 +272,15 @@ class MainWindow(QMainWindow):
     def _export_task(self, task_id: str) -> None:
         self._submit(lambda: self.facade.export_task(task_id))
 
-    def _create_and_run_direct(self, request, context):
-        task_id = self.facade.create_direct_tasks(request)
-        context.report_progress({"message": "batch_created"})
+    def _create_direct_batch(self, request) -> tuple[str, str]:
+        try:
+            task_id = self.facade.create_direct_tasks(request)
+        except Exception as error:
+            self.facade.record_operation_failure("create_direct_batch", error)
+            raise
+        return ("direct_task_created", task_id)
+
+    def _run_created_task(self, task_id: str, context):
         return self.facade.run_task(task_id, on_progress=context.report_progress)
 
     def _create_and_run_xlsx(self, schools: tuple[object, ...], request, context):
@@ -306,6 +312,10 @@ class MainWindow(QMainWindow):
         if self._verification_start_pending:
             self._waiting_for_verification = True
             self._verification_start_pending = False
+        if isinstance(_result, tuple) and _result[0] == "direct_task_created":
+            self._refresh_after_command()
+            self._submit(lambda context: self._run_created_task(_result[1], context))
+            return
         if isinstance(_result, Path):
             self.operation_info.set_message(f"后台操作已完成。输出：{_result}")
         elif isinstance(_result, dict) and _result and all(isinstance(value, Path) for value in _result.values()):

@@ -25,6 +25,7 @@ class ShellFacade:
     def __init__(self) -> None:
         self.created: list[NewCrawlRequest] = []
         self.run_progress: list[str] = []
+        self.operation_failures: list[str] = []
 
     def ai_settings(self) -> AiSettingsView:
         return AiSettingsView(False, "local", "", "", False)
@@ -47,6 +48,9 @@ class ShellFacade:
         on_progress({"task_id": task_id, "message": "school_started"})
         self.run_progress.append(task_id)
         return {"id": task_id, "status": "completed"}
+
+    def record_operation_failure(self, operation: str, _error: Exception) -> None:
+        self.operation_failures.append(operation)
 
     def task_rows(self):
         return ()
@@ -227,11 +231,26 @@ class DesktopUiShellTests(unittest.TestCase):
         self.assertEqual(self.facade.created, [request])
         self.assertIn("已完成", self.window.operation_info.message())
 
+    def test_direct_batch_create_failure_does_not_run(self) -> None:
+        self.facade.create_direct_tasks = lambda _request: (_ for _ in ()).throw(RuntimeError("token=secret"))
+        self.window._start_direct_batch(NewCrawlRequest(("https://one.edu/faculty",), output_dir="output"))
+        self.assertTrue(self._wait_until(lambda: self.facade.operation_failures == ["create_direct_batch"]))
+        self.assertEqual(self.facade.run_progress, [])
+        return
+        request = NewCrawlRequest(("https://one.edu/faculty",), output_dir="output")
+        self.facade.create_direct_tasks = lambda _request: (_ for _ in ()).throw(RuntimeError("token=secret"))
+
+        self.window._start_direct_batch(request)
+
+        self.assertTrue(self._wait_until(lambda: "澶辫触" in self.window.operation_info.message()))
+        self.assertEqual(self.facade.run_progress, [])
+        self.assertEqual(self.facade.operation_failures, ["create_direct_batch"])
+
     def test_failed_verification_start_rolls_back_waiting_state_and_uses_safe_message(self) -> None:
         self.facade.begin_verification = lambda _review_id: (_ for _ in ()).throw(RuntimeError("token=secret"))
         self.window._submit_verification_start("7")
 
-        self.assertTrue(self._wait_until(lambda: "失败" in self.window.operation_info.message()))
+        self.assertTrue(self._wait_until(lambda: self.facade.operation_failures == ["create_direct_batch"]))
         self.assertNotIn("secret", self.window.operation_info.message())
         self.assertIn("空闲", self.window.background_status_text())
 

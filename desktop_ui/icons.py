@@ -15,12 +15,12 @@ class NavigationItem:
 
 
 NAVIGATION_ITEMS = (
-    NavigationItem("overview", "Overview", QStyle.SP_ComputerIcon),
-    NavigationItem("tasks", "Tasks", QStyle.SP_FileDialogDetailedView),
-    NavigationItem("verification", "Manual verification", QStyle.SP_DialogApplyButton),
-    NavigationItem("runs", "Run history", QStyle.SP_BrowserReload),
-    NavigationItem("sessions", "Site sessions", QStyle.SP_DriveNetIcon),
-    NavigationItem("settings", "Settings", QStyle.SP_FileDialogContentsView),
+    NavigationItem("overview", "概览", QStyle.SP_ComputerIcon),
+    NavigationItem("tasks", "任务", QStyle.SP_FileDialogDetailedView),
+    NavigationItem("verification", "人工验证", QStyle.SP_DialogApplyButton),
+    NavigationItem("runs", "运行历史", QStyle.SP_BrowserReload),
+    NavigationItem("sessions", "站点会话", QStyle.SP_DriveNetIcon),
+    NavigationItem("settings", "设置", QStyle.SP_FileDialogContentsView),
 )
 
 

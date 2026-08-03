@@ -15,7 +15,35 @@ from build_release import RELEASE_FILES, build_archive
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _archive_subprocess_pythonpath(
+    extracted: Path,
+    inherited: str,
+    source_cwd: Path,
+) -> str:
+    """Keep inherited dependency paths valid after the archive test changes CWD."""
+    entries = [str(extracted)]
+    for entry in filter(None, inherited.split(os.pathsep)):
+        path = Path(entry)
+        entries.append(str(path if path.is_absolute() else (source_cwd / path).resolve()))
+    return os.pathsep.join(entries)
+
+
 class ReleasePackageTests(unittest.TestCase):
+    def test_archive_subprocess_normalizes_relative_pythonpath_entries(self) -> None:
+        source_cwd = PROJECT_ROOT
+        inherited = os.pathsep.join((".runtime-packages", "relative-tools"))
+
+        pythonpath = _archive_subprocess_pythonpath(
+            Path("C:/archive/faculty-crawler-windows"),
+            inherited,
+            source_cwd,
+        )
+
+        entries = pythonpath.split(os.pathsep)
+        self.assertEqual(entries[0], "C:\\archive\\faculty-crawler-windows")
+        self.assertEqual(entries[1], str((source_cwd / ".runtime-packages").resolve()))
+        self.assertEqual(entries[2], str((source_cwd / "relative-tools").resolve()))
+
     def test_release_uses_single_version_source(self) -> None:
         version_path = PROJECT_ROOT / "VERSION"
         build_text = (PROJECT_ROOT / "build_installer.ps1").read_text(
@@ -124,11 +152,17 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_pyinstaller_spec_bundles_runtime_and_task_browser_assets(self) -> None:
         text = (PROJECT_ROOT / "faculty_crawler.spec").read_text(encoding="utf-8")
+        self.assertIn('collect_submodules("desktop_ui")', text)
+        self.assertIn('desktop_ui" / "theme.qss', text)
         self.assertIn('collect_submodules("ui")', text)
         self.assertIn('collect_submodules("crawler")', text)
         self.assertIn("FACULTY_CRAWLER_BROWSER_SOURCE", text)
         self.assertIn('"ms-playwright"', text)
         self.assertIn("pyinstaller_runtime_hook.py", text)
+
+    def test_release_archive_includes_the_new_desktop_shell(self) -> None:
+        self.assertIn(Path("desktop_ui/app.py"), RELEASE_FILES)
+        self.assertIn(Path("desktop_ui/theme.qss"), RELEASE_FILES)
 
         hook = (PROJECT_ROOT / "pyinstaller_runtime_hook.py").read_text(
             encoding="utf-8"
@@ -208,6 +242,15 @@ class ReleasePackageTests(unittest.TestCase):
             self.assertIn(required, guide)
         self.assertNotIn("浣跨敤璇存槑", readme + guide)
 
+    def test_documentation_explains_ai_key_and_multi_url_batch_behavior(self) -> None:
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        guide = (PROJECT_ROOT / "使用说明.txt").read_text(encoding="utf-8")
+
+        for document in (readme, guide):
+            self.assertIn("AI 设置", document)
+            self.assertIn("DPAPI", document)
+            self.assertIn("1 个批次任务", document)
+
     def test_build_archive_contains_only_source_files_under_one_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             archive_path = build_archive(PROJECT_ROOT, Path(temp_dir))
@@ -235,17 +278,20 @@ class ReleasePackageTests(unittest.TestCase):
             for path in (PROJECT_ROOT / package).rglob("*.py")
         }
         self.assertTrue(expected_modules.issubset(names))
-        forbidden = (
-            "sessions/",
+        forbidden_directories = {
+            "sessions",
             "verification-queue",
-            "tasks/",
-            "logs/",
-            "reports/",
-            "secret",
-            ".installer-build/",
-        )
+            "tasks",
+            "logs",
+            "reports",
+            ".installer-build",
+        }
         self.assertFalse(
-            any(part in name.casefold() for name in names for part in forbidden)
+            any(
+                any(part.casefold() in forbidden_directories for part in Path(name).parts)
+                or "secret" in Path(name).name.casefold()
+                for name in names
+            )
         )
 
     def test_release_contains_evidence_workflow_and_excludes_runtime_data(self) -> None:
@@ -282,7 +328,11 @@ class ReleasePackageTests(unittest.TestCase):
             extracted = root / "extract" / "faculty-crawler-windows"
             environment = os.environ.copy()
             environment["PYTHONDONTWRITEBYTECODE"] = "1"
-            environment["PYTHONPATH"] = str(extracted)
+            environment["PYTHONPATH"] = _archive_subprocess_pythonpath(
+                extracted,
+                environment.get("PYTHONPATH", ""),
+                Path.cwd(),
+            )
             result = subprocess.run(
                 [sys.executable, "-c", "import desktop_app"],
                 cwd=root,

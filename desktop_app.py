@@ -1961,9 +1961,21 @@ def _package_version(package_name: str) -> str:
         return "not installed"
 
 
+def resolve_desktop_entry() -> Callable[[], object]:
+    """Choose the packaged desktop shell, retaining Tk only for diagnostics."""
+    if os.environ.get("FACULTY_CRAWLER_LEGACY_UI") == "1":
+        from workflow_desktop import main as legacy_main
+
+        return legacy_main
+
+    from desktop_ui import run_desktop
+
+    return run_desktop
+
+
 def main() -> None:
-    from workflow_desktop import main as workflow_main
-    workflow_main()
+    """Start the Qt desktop shell unless the explicit legacy escape hatch is set."""
+    resolve_desktop_entry()()
 
 
 if __name__ == "__main__":

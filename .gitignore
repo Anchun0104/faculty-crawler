@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.runtime-packages/
 .installer-build/
 .worktrees/
 .superpowers/

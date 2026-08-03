@@ -179,10 +179,19 @@ try {
         throw "Unable to inspect the PyInstaller archive."
     }
     $ArchiveText = $ArchiveListing -join "`n"
-    foreach ($RequiredModule in @("crawler.faculty_crawler", "ui.controller", "faculty_workflow.service", "pypdf")) {
+    foreach ($RequiredModule in @("desktop_ui.app", "crawler.faculty_crawler", "ui.controller", "faculty_workflow.service", "pypdf")) {
         if ($ArchiveText -notmatch [regex]::Escape($RequiredModule)) {
             throw "The application bundle is missing required module $RequiredModule."
         }
+    }
+
+    $QtPlatformPlugin = Get-ChildItem `
+        -LiteralPath $ApplicationRoot `
+        -Filter "qwindows.dll" `
+        -File `
+        -Recurse
+    if (-not $QtPlatformPlugin) {
+        throw "The application bundle is missing the Qt Windows platform plugin."
     }
 
     if (-not $InnoCompiler) {

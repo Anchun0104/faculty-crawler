@@ -2,6 +2,27 @@
 
 本文件是功能变更的完整索引。版本状态、下载资产与 Git 标签以对应的 GitHub Release 为准。
 
+## 2.2.0（本地发布候选）
+
+### 新增与改进
+
+- 完整重做 PySide6 桌面端视觉层，采用 Modern Scientific Utility 风格：浅色科学工具主题、分组导航、页面级标题、卡片、双栏检查器、运行时间线和统一的表格/输入层级。
+- 应用名称、导航、按钮、状态、空状态、弹窗和设置页统一使用简体中文；API、URL、Token、Excel、XLSX、DeepSeek、CAPTCHA 等技术名保留英文。
+- 重做 Overview、Tasks、Manual verification、Run history、Site sessions、Settings/AI、Storage 和 New Crawl 页面，同时保持任务、人工验证、会话、导出、清理和 AI 配置逻辑不变。
+- New Crawl 支持 URL/XLSX 双模式的即时校验：重复项、有效数量、学校数量、输出目录和批次按钮状态会随输入更新；多 URL 仍创建一个可恢复的批次任务。
+- 增加显式启用的内存 UI fixture、辅助功能名称和真实窗口验收测试，不读取真实任务数据库、不访问网络，也不改变生产默认行为。
+
+### 兼容与安全边界
+
+- 2.1.0 的证据优先采集、快照、PDF/二级来源、邮箱解码、review 生命周期、运行报告和可选 AI 边界保持不变。
+- 默认仍为本地确定性规则；AI 不搜索、生成或替换目录 URL，不猜测邮箱，不绕过 CAPTCHA、登录或访问控制。
+- API Key 继续由 Windows DPAPI 保护；Token、Cookie、会话凭据和网页正文不会进入任务文件、Excel、日志或诊断 ZIP。
+
+### 发布状态
+
+- 当前为本地发布候选，尚未创建 `v2.2.0` Git 标签或 GitHub Release。
+- 完整候选说明见 [RELEASE_NOTES_2.2.0.md](RELEASE_NOTES_2.2.0.md)。正式发布后补充安装包、源码包和 SHA-256 资产链接。
+
 ## 2.1.0（已发布）
 
 ### 新增

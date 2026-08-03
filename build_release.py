@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import zipfile
 from pathlib import Path
 
@@ -10,7 +11,7 @@ _ROOT_RELEASE_FILES = (
     Path("README.md"),
     Path("CHANGELOG.md"),
     Path("README_WORKFLOW_AI.md"),
-    Path("RELEASE_NOTES_2.1.0.md"),
+    Path("RELEASE_NOTES_2.2.0.md"),
     Path("build_installer.ps1"),
     Path("build_release.py"),
     Path("desktop_app.py"),
@@ -41,6 +42,14 @@ RELEASE_FILES = _ROOT_RELEASE_FILES + tuple(
 )
 ARCHIVE_NAME = "faculty-crawler-windows.zip"
 ARCHIVE_ROOT = "faculty-crawler-windows"
+
+
+def write_sha256_file(path: Path, destination: Path | None = None) -> Path:
+    """Write a standard two-column SHA-256 checksum file next to an artifact."""
+    checksum_path = destination or path.with_name(f"{path.name}.sha256.txt")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest().upper()
+    checksum_path.write_text(f"{digest}  {path.name}\n", encoding="ascii")
+    return checksum_path
 
 
 def build_archive(project_root: Path, dist_dir: Path) -> Path:
@@ -74,7 +83,9 @@ def build_archive(project_root: Path, dist_dir: Path) -> Path:
 def main() -> None:
     project_root = Path(__file__).resolve().parent
     archive_path = build_archive(project_root, project_root / "dist")
+    checksum_path = write_sha256_file(archive_path)
     print(f"Created {archive_path}")
+    print(f"Created {checksum_path}")
 
 
 if __name__ == "__main__":

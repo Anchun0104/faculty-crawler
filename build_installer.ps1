@@ -54,6 +54,7 @@ $TranslationServiceRoot = Join-Path $ApplicationRoot "translation-service"
 $TranslationServiceExe = Join-Path $TranslationServiceRoot "LibreTranslate.exe"
 $InstallerRoot = Join-Path $ProjectRoot "dist\installer"
 $InstallerExe = Join-Path $InstallerRoot "FacultyCrawler-Setup-$Version.exe"
+$InstallerChecksum = Join-Path $InstallerRoot "FacultyCrawler-Setup-$Version.sha256.txt"
 $VersionResource = Join-Path $BuildRoot "file_version_info.txt"
 
 function Remove-TaskBuildDirectory {
@@ -229,10 +230,14 @@ try {
     $InstallerHash = (
         Get-FileHash -LiteralPath $InstallerExe -Algorithm SHA256
     ).Hash
+    Set-Content -LiteralPath $InstallerChecksum `
+        -Value "$InstallerHash  $(Split-Path -Leaf $InstallerExe)" `
+        -Encoding ASCII
     Write-Host "Version: $Version"
     Write-Host "Git commit: $GitCommit"
     Write-Host "Built: $ApplicationExe"
     Write-Host "Built: $InstallerExe"
+    Write-Host "Built: $InstallerChecksum"
     Write-Host "Installer SHA-256: $InstallerHash"
 }
 finally {

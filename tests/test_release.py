@@ -7,9 +7,10 @@ import shutil
 import os
 import subprocess
 import sys
+import hashlib
 from pathlib import Path
 
-from build_release import RELEASE_FILES, build_archive
+from build_release import RELEASE_FILES, build_archive, write_sha256_file
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -56,7 +57,7 @@ class ReleasePackageTests(unittest.TestCase):
             PROJECT_ROOT / "installer" / "faculty-crawler.iss"
         ).read_text(encoding="utf-8")
 
-        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "2.1.0")
+        self.assertEqual(version_path.read_text(encoding="utf-8").strip(), "2.2.0")
         self.assertIn(Path("VERSION"), RELEASE_FILES)
         self.assertIn('Join-Path $ProjectRoot "VERSION"', build_text)
         self.assertIn('"FacultyCrawler-Setup-$Version.exe"', build_text)
@@ -187,6 +188,8 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertIn("FacultyCrawler.exe", text)
         self.assertIn("chrome.exe", text)
         self.assertIn("FacultyCrawler-Setup-$Version.exe", text)
+        self.assertIn("FacultyCrawler-Setup-$Version.sha256.txt", text)
+        self.assertIn("Set-Content -LiteralPath $InstallerChecksum", text)
         self.assertIn("crawler.faculty_crawler", text)
         self.assertIn("ui.controller", text)
         self.assertNotIn("$HOME", text)
@@ -215,7 +218,11 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertIn("requirements-build.txt", readme)
         self.assertIn("build_installer.ps1", readme)
         self.assertIn(
-            f"releases/download/v{version}/FacultyCrawler-Setup-{version}.exe",
+            "releases/download/v2.1.0/FacultyCrawler-Setup-2.1.0.exe",
+            readme,
+        )
+        self.assertIn(
+            f"dist/installer/FacultyCrawler-Setup-{version}.exe",
             readme,
         )
         self.assertIn("系统临时构建目录", readme)
@@ -306,7 +313,7 @@ class ReleasePackageTests(unittest.TestCase):
             "faculty-crawler-windows/faculty_workflow/service.py",
             "faculty-crawler-windows/scripts/validate_task_acceptance.py",
             "faculty-crawler-windows/tests/test_workflow_service.py",
-            "faculty-crawler-windows/RELEASE_NOTES_2.1.0.md",
+            "faculty-crawler-windows/RELEASE_NOTES_2.2.0.md",
         }
         self.assertTrue(required.issubset(names), required - names)
         forbidden_prefixes = (
@@ -415,6 +422,18 @@ class ReleasePackageTests(unittest.TestCase):
             second_bytes = second_archive.read_bytes()
 
         self.assertEqual(first_bytes, second_bytes)
+
+    def test_release_checksum_file_uses_uppercase_sha256_and_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact = Path(temp_dir) / "artifact.zip"
+            artifact.write_bytes(b"release-checksum")
+            checksum = write_sha256_file(artifact)
+
+            expected = hashlib.sha256(artifact.read_bytes()).hexdigest().upper()
+            self.assertEqual(
+                checksum.read_text(encoding="ascii"),
+                f"{expected}  artifact.zip\n",
+            )
 
 
 if __name__ == "__main__":

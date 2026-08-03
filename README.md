@@ -10,9 +10,17 @@
 | --- | --- | --- |
 | [v1.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v1.0.0) | 已归档的源码基线 | 基础目录采集、Excel 导出和桌面/命令行入口；没有可验证的历史安装包，但可从该标签重建。 |
 | [v2.0.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.0.0) | 当前稳定安装包版本 | 离线多语言职称翻译与分类、人工复核、内置 Chromium 和离线翻译组件。 |
-| [v2.1.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0) | 当前正式版本 | 统一直接 URL 与 XLSX 任务、官方证据和快照、PDF/二级页面、轻量邮箱解码、快速路径、有限 review、运行报告和可选兼容 AI。 |
+| [v2.1.0](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0) | 上一正式版本 | 统一直接 URL 与 XLSX 任务、官方证据和快照、PDF/二级页面、轻量邮箱解码、快速路径、有限 review、运行报告和可选兼容 AI。 |
+| v2.2.0 | 本地发布候选（待创建 GitHub Release） | Modern Scientific Utility 桌面端视觉重做、全界面简体中文化、统一页面层级、可访问性增强和 New Crawl 即时反馈。 |
 
-完整的逐版本功能记录请见 [CHANGELOG.md](CHANGELOG.md)。2.1.0 的安装包、源码包和 SHA-256 校验文件均附在 [v2.1.0 Release](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0)。
+完整的逐版本功能记录请见 [CHANGELOG.md](CHANGELOG.md)。2.1.0 的安装包、源码包和 SHA-256 校验文件均附在 [v2.1.0 Release](https://github.com/Anchun0104/faculty-crawler/releases/tag/v2.1.0)；2.2.0 的本地构建说明见 [RELEASE_NOTES_2.2.0.md](RELEASE_NOTES_2.2.0.md)。
+
+### 2.2.0 桌面端重做
+
+- 应用名称、导航、按钮、状态、空状态、弹窗和设置页统一为简体中文；API、URL、Token、Excel、XLSX、DeepSeek、CAPTCHA 等技术名保留英文。
+- Overview、Tasks、Manual verification、Run history、Site sessions、Settings/AI、Storage 和 New Crawl 均按同一 Modern Scientific Utility 视觉语言重做。
+- 保留原有任务、人工验证、会话、导出、清理和 AI 配置逻辑；新增的 UI fixture 只在显式验收模式启用，不会进入生产默认数据。
+- 新建采集支持 URL/XLSX 双模式、重复项和批量数量即时反馈；多 URL 仍创建一个可恢复的批次任务，不拆成相互独立的数据库任务。
 
 ### 选择使用方式
 
@@ -129,7 +137,7 @@
 
 ### Windows 普通用户
 
-发布给同事时，优先使用 GitHub Releases 中的 [FacultyCrawler-Setup-2.1.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/v2.1.0/FacultyCrawler-Setup-2.1.0.exe)。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。
+在 v2.2.0 GitHub Release 创建并上传资产前，稳定下载链接仍指向上一正式版：[FacultyCrawler-Setup-2.1.0.exe](https://github.com/Anchun0104/faculty-crawler/releases/download/v2.1.0/FacultyCrawler-Setup-2.1.0.exe)。2.2.0 候选安装包由本地 `dist/installer/FacultyCrawler-Setup-2.2.0.exe` 提供；正式发布后再将下载链接切换到 v2.2.0。安装包包含桌面程序、Playwright Chromium 与离线翻译服务，正常使用不需要 Python、命令行、Docker 或管理员权限。
 
 当前安装包没有商业代码签名，因此 Windows SmartScreen 可能显示“未知发布者”。安装前应确认文件来自本项目的 GitHub Release，并核对版本说明中的 SHA-256。
 
@@ -160,7 +168,7 @@ Windows 源码模式也可以先运行一次 `setup.bat`，之后双击 `start.b
 
 ## 版本管理
 
-项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `2.1.0`。升级版本时只需修改该文件，例如从 `2.1.0` 改为 `2.2.0`；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
+项目根目录的 `VERSION` 是唯一版本来源，当前版本为 `2.2.0`。升级版本时只需修改该文件；构建脚本会把版本同步写入桌面程序、安装器元数据和安装包文件名。
 
 每次构建完成后，脚本会输出版本号、Git 提交号以及安装包 SHA-256，便于同事确认拿到的是同一个版本。
 
@@ -172,7 +180,7 @@ Windows 源码模式也可以先运行一次 `setup.bat`，之后双击 `start.b
 python build_release.py
 ```
 
-生成文件位于 `dist/faculty-crawler-windows.zip`。发布脚本会排除虚拟环境、测试缓存、历史输出和 Git 元数据。
+生成文件位于 `dist/faculty-crawler-windows.zip`，并同时生成 `dist/faculty-crawler-windows.zip.sha256.txt`。发布脚本会排除虚拟环境、测试缓存、历史输出和 Git 元数据。
 
 构建桌面程序和安装包需要：
 
@@ -201,8 +209,11 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1 `
 
 ```text
 %TEMP%/FacultyCrawler-installer-build/dist/FacultyCrawler/FacultyCrawler.exe
-dist/installer/FacultyCrawler-Setup-2.1.0.exe
+dist/installer/FacultyCrawler-Setup-2.2.0.exe
+dist/installer/FacultyCrawler-Setup-2.2.0.sha256.txt
 ```
+
+`build_installer.ps1` 会在安装器生成后自动写入 SHA-256 校验文件；发布到 GitHub 时应将安装器、源码 ZIP 和两个校验文件一起上传。
 
 ## 运行测试
 
@@ -234,7 +245,7 @@ python -m unittest discover -s tests -v
 
 ### AI 为可选辅助，不参与目录发现
 
-2.1.0 的脚本和桌面端默认使用本地确定性规则；用户只有主动启用并配置兼容模型后，才会调用外部 AI。AI 仅可处理已抓取页面的结构化解析、专业判断和政策草案，不能生成/替换目录 URL、猜测邮箱或作为正式证据。
+2.2.0 的脚本和桌面端默认使用本地确定性规则；用户只有主动启用并配置兼容模型后，才会调用外部 AI。AI 仅可处理已抓取页面的结构化解析、专业判断和政策草案，不能生成/替换目录 URL、猜测邮箱或作为正式证据。
 
 因此，默认运行没有模型费用，也不会把网页内容发送给第三方。即使启用 AI，最终 `accepted` 记录仍必须具有足以自动确认的官方页面字段证据；不充分或冲突的数据会进入 review，而非被模型猜测补齐。
 
